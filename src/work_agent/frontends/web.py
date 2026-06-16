@@ -43,7 +43,7 @@ _INDEX_HTML = """<!doctype html>
 </style>
 </head>
 <body>
-<header>work-agent — chat</header>
+<header>work-agent — chat &nbsp;·&nbsp; <a href="/dashboard">dashboard</a></header>
 <div id="log"></div>
 <form id="form">
   <input id="input" autocomplete="off" placeholder="Describe a task…" />
@@ -93,19 +93,252 @@ _INDEX_HTML = """<!doctype html>
 """
 
 
+_DASHBOARD_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>work-agent — dashboard</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; }
+  header { padding: .6rem 1rem; border-bottom: 1px solid #8884; font-weight: 600; }
+  nav { display: flex; gap: .5rem; padding: .5rem 1rem; border-bottom: 1px solid #8884; }
+  nav button { padding: .4rem .8rem; border: 1px solid #8886; border-radius: .5rem;
+               background: transparent; cursor: pointer; }
+  nav button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+  main { padding: 1rem; max-width: 880px; }
+  section { display: none; }
+  section.active { display: block; }
+  .cards { display: flex; flex-wrap: wrap; gap: .75rem; }
+  .card { flex: 1 1 140px; border: 1px solid #8884; border-radius: .6rem; padding: .75rem; }
+  .card .v { font-size: 1.5rem; font-weight: 700; }
+  .card .l { opacity: .7; font-size: .8rem; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: .4rem; border-bottom: 1px solid #8883; font-size: .9rem; }
+  label { display: block; margin: .5rem 0 .15rem; font-size: .85rem; opacity: .8; }
+  input, select, textarea { width: 100%; padding: .4rem; border: 1px solid #8886;
+                            border-radius: .4rem; box-sizing: border-box; font: inherit; }
+  textarea { min-height: 6rem; }
+  button.go { margin-top: .8rem; padding: .5rem 1rem; border: 0; border-radius: .5rem;
+              background: #2563eb; color: #fff; cursor: pointer; }
+  .row { display: flex; gap: .5rem; } .row > * { flex: 1; }
+  .muted { opacity: .65; font-size: .85rem; }
+  .ok { color: #16a34a; } .bad { color: #dc2626; }
+</style>
+</head>
+<body>
+<header>work-agent — dashboard &nbsp;·&nbsp; <a href="/">chat</a></header>
+<nav>
+  <button data-tab="metrics" class="active">Metrics</button>
+  <button data-tab="tasks">Scheduled tasks</button>
+  <button data-tab="config">Config</button>
+</nav>
+<main>
+  <section id="metrics" class="active">
+    <div class="cards" id="sys"></div>
+    <h3>Tokens & reliability</h3>
+    <div class="cards" id="usage"></div>
+    <p class="muted" id="uptime"></p>
+  </section>
+
+  <section id="tasks">
+    <table><thead><tr><th>id</th><th>cron</th><th>deliver</th><th>next</th>
+      <th>task</th><th></th></tr></thead><tbody id="tasks-body"></tbody></table>
+    <h3>Add task</h3>
+    <div class="row">
+      <div><label>cron</label><input id="t-cron" placeholder="0 9 * * *" /></div>
+      <div><label>timezone (optional)</label><input id="t-tz" placeholder="Europe/Moscow" /></div>
+    </div>
+    <label>task</label><input id="t-task" placeholder="send a news digest" />
+    <button class="go" id="t-add">Add</button>
+    <p class="muted">Dashboard-created tasks deliver to a log file under
+      /workspace/.work-agent/schedule-output/.</p>
+  </section>
+
+  <section id="config">
+    <h3>Models per purpose</h3>
+    <div id="profiles"></div>
+    <label>Default profile</label><select id="c-default"></select>
+    <label>System prompt addendum (appended to every turn)</label>
+    <textarea id="c-extra" placeholder="Extra instructions..."></textarea>
+    <div class="row">
+      <div><label>Effort</label>
+        <select id="c-effort"><option>low</option><option>medium</option>
+          <option>high</option><option>xhigh</option><option>max</option></select></div>
+      <div><label>Permission default</label>
+        <select id="c-perm"><option>allow</option><option>ask</option><option>deny</option></select></div>
+      <div><label>Max iterations</label><input id="c-maxit" type="number" /></div>
+    </div>
+    <button class="go" id="c-save">Save config</button>
+    <p class="muted" id="c-status"></p>
+  </section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  document.querySelectorAll("nav button").forEach((b) => b.onclick = () => {
+    document.querySelectorAll("nav button").forEach((x) => x.classList.remove("active"));
+    document.querySelectorAll("section").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active"); $(b.dataset.tab).classList.add("active");
+  });
+  const card = (v, l) => `<div class="card"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+
+  async function loadMetrics() {
+    const m = await (await fetch("/api/metrics")).json();
+    const s = m.system || {};
+    $("sys").innerHTML = s.available
+      ? card(s.cpu_percent + "%", "CPU") + card(s.memory_percent + "%", "Memory")
+        + card(s.memory_used_mb + " / " + s.memory_total_mb + " MB", "RAM used")
+        + card(s.net_sent_mb + " / " + s.net_recv_mb + " MB", "Net sent / recv")
+      : card("n/a", "System metrics (install psutil)");
+    const rel = (m.llm.reliability * 100).toFixed(1);
+    $("usage").innerHTML = card(m.tokens.total, "Tokens total")
+      + card(m.tokens.input + " / " + m.tokens.output, "Input / output")
+      + card(rel + "%", "LLM reliability")
+      + card(m.llm.requests, "LLM requests")
+      + card(m.llm.failures, "Failures")
+      + card(m.tools.calls + " / " + m.tools.errors, "Tool calls / errors");
+    $("uptime").textContent = "uptime: " + m.uptime_seconds + "s · refusals: " + m.llm.refusals;
+  }
+
+  async function loadTasks() {
+    const d = await (await fetch("/api/schedules")).json();
+    $("tasks-body").innerHTML = (d.tasks || []).map((t) => `<tr>
+      <td>${t.id}</td><td>${t.cron}</td><td>${(t.delivery||{}).type||""}</td>
+      <td>${t.next_run||""}</td><td>${(t.task||"").slice(0,40)}</td>
+      <td><button onclick="toggle('${t.id}','${t.enabled?"disable":"enable"}')">${t.enabled?"disable":"enable"}</button>
+          <button onclick="del('${t.id}')">delete</button></td></tr>`).join("");
+  }
+  window.toggle = async (id, action) => { await fetch(`/api/schedules/${id}/${action}`, {method:"POST"}); loadTasks(); };
+  window.del = async (id) => { await fetch(`/api/schedules/${id}`, {method:"DELETE"}); loadTasks(); };
+  $("t-add").onclick = async () => {
+    const body = { cron: $("t-cron").value, task: $("t-task").value, timezone: $("t-tz").value || null };
+    const r = await (await fetch("/api/schedules", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)})).json();
+    if (r.status !== "ok") alert(r.message || "error"); else { $("t-cron").value=$("t-task").value=$("t-tz").value=""; loadTasks(); }
+  };
+
+  let CFG = null, ROLES = [], PROVIDERS = [];
+  async function loadConfig() {
+    const d = await (await fetch("/api/config")).json();
+    CFG = d.config; ROLES = d.roles; PROVIDERS = d.providers;
+    $("profiles").innerHTML = ROLES.map((role) => {
+      const p = (CFG.profiles && CFG.profiles[role]) || {};
+      const opts = PROVIDERS.map((pr) => `<option ${pr===(p.provider||"")?"selected":""}>${pr}</option>`).join("");
+      return `<div class="row" style="margin-bottom:.4rem"><div><label>${role} · provider</label>
+        <select data-role="${role}" data-k="provider"><option value=""></option>${opts}</select></div>
+        <div><label>model</label><input data-role="${role}" data-k="model" value="${p.model||""}" /></div>
+        <div><label>effort</label><input data-role="${role}" data-k="effort" value="${p.effort||""}" /></div></div>`;
+    }).join("");
+    $("c-default").innerHTML = ROLES.map((r) => `<option ${r===CFG.default_profile?"selected":""}>${r}</option>`).join("");
+    $("c-extra").value = CFG.system_prompt_extra || "";
+    $("c-effort").value = CFG.agent ? CFG.agent.effort : "high";
+    $("c-perm").value = CFG.tools.permissions.default;
+    $("c-maxit").value = CFG.agent ? CFG.agent.max_iterations : 50;
+  }
+  $("c-save").onclick = async () => {
+    const profiles = {};
+    ROLES.forEach((r) => profiles[r] = {});
+    document.querySelectorAll("#profiles [data-role]").forEach((el) => {
+      if (el.value) profiles[el.dataset.role][el.dataset.k] = el.value;
+    });
+    const payload = {
+      profiles, default_profile: $("c-default").value,
+      system_prompt_extra: $("c-extra").value, effort: $("c-effort").value,
+      permission_default: $("c-perm").value, max_iterations: Number($("c-maxit").value),
+    };
+    const r = await (await fetch("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)})).json();
+    $("c-status").textContent = r.status === "ok" ? "Saved to " + r.saved_to : "Error";
+  };
+
+  loadMetrics(); loadTasks(); loadConfig();
+  setInterval(loadMetrics, 3000);
+</script>
+</body>
+</html>
+"""
+
+
 def create_app(config: Config):
-    from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+    import asyncio as _asyncio
+    from pathlib import Path
+
+    from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
     from fastapi.responses import HTMLResponse
 
+    from ..config import SPECIALIST_ROLES
+    from ..metrics import METRICS
+    from ..scheduling import ScheduledTask, ScheduleStore
+
     app = FastAPI(title="work-agent")
+
+    def _store() -> ScheduleStore:
+        return ScheduleStore(Path(config.workdir) / ".work-agent")
 
     @app.get("/")
     async def index() -> "HTMLResponse":
         return HTMLResponse(_INDEX_HTML)
 
+    @app.get("/dashboard")
+    async def dashboard() -> "HTMLResponse":
+        return HTMLResponse(_DASHBOARD_HTML)
+
     @app.get("/healthz")
     async def healthz() -> dict:
         return {"status": "ok", "provider": config.provider}
+
+    # --- dashboard API ---------------------------------------------------
+
+    @app.get("/api/metrics")
+    async def api_metrics() -> dict:
+        return await _asyncio.get_running_loop().run_in_executor(None, METRICS.snapshot)
+
+    @app.get("/api/config")
+    async def api_config_get() -> dict:
+        return {
+            "config": config.to_dict(),
+            "roles": ["chat", *SPECIALIST_ROLES],
+            "providers": ["anthropic", "deepseek", "openai_compatible"],
+        }
+
+    @app.post("/api/config")
+    async def api_config_post(payload: dict = Body(...)) -> dict:
+        config.update_from(payload)
+        path = config.save()
+        return {"status": "ok", "saved_to": path, "config": config.to_dict()}
+
+    @app.get("/api/schedules")
+    async def api_schedules() -> dict:
+        from dataclasses import asdict
+
+        return {"tasks": [asdict(t) for t in _store().load()]}
+
+    @app.post("/api/schedules")
+    async def api_schedule_add(body: dict = Body(...)) -> dict:
+        from ..scheduling import is_valid_cron
+
+        cron = (body.get("cron") or "").strip()
+        task = (body.get("task") or "").strip()
+        if not cron or not task:
+            return {"status": "error", "message": "cron and task are required"}
+        if not is_valid_cron(cron):
+            return {"status": "error", "message": f"invalid cron: {cron}"}
+        delivery = body.get("delivery") or {"type": "log"}
+        created = _store().add(
+            ScheduledTask(cron=cron, task=task, delivery=delivery, timezone=body.get("timezone"))
+        )
+        return {"status": "ok", "id": created.id, "next_run": created.next_run}
+
+    @app.post("/api/schedules/{task_id}/{action}")
+    async def api_schedule_toggle(task_id: str, action: str) -> dict:
+        if action not in ("enable", "disable"):
+            return {"status": "error", "message": "action must be enable or disable"}
+        ok = _store().set_enabled(task_id, action == "enable")
+        return {"status": "ok" if ok else "error"}
+
+    @app.delete("/api/schedules/{task_id}")
+    async def api_schedule_delete(task_id: str) -> dict:
+        ok = _store().remove(task_id)
+        return {"status": "ok" if ok else "error"}
 
     @app.websocket("/ws")
     async def ws_endpoint(websocket: "WebSocket") -> None:

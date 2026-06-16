@@ -35,8 +35,9 @@ See [DESIGN.md](DESIGN.md) for the full architecture.
   delivers results to your Telegram chat or a log file.
 - **Permission policy.** Per-tool `allow` / `ask` / `deny` gating, with an
   interactive prompt and a `--yolo` auto-approve mode.
-- **Multiple frontends.** CLI (REPL / one-shot), a **web chat server**, and a
-  **Telegram bot** — all driving the same agent.
+- **Multiple frontends.** CLI (REPL / one-shot), a **web chat server with a
+  dashboard** (metrics, scheduled tasks, live config editing), and a **Telegram
+  bot** — all driving the same agent.
 - **Runs in Docker.** Isolated container, non-root user, `/workspace` mount.
 - **Extensible.** Plugin and MCP tool sources are planned (see DESIGN.md).
 
@@ -69,7 +70,20 @@ export TELEGRAM_BOT_TOKEN=123456:ABC...
 work-agent telegram
 ```
 
-The web UI is a single page that submits tasks over a WebSocket and streams the
+The web server also serves a **dashboard** at `/dashboard`:
+
+- **Metrics** — CPU / memory / network (via `psutil`), token usage (input /
+  output / total), and LLM reliability (success rate, requests, failures,
+  refusals) plus tool call/error counts. Auto-refreshes. Metrics are
+  per-process (the process serving the dashboard).
+- **Scheduled tasks** — view, add, enable/disable, and delete cron jobs.
+- **Config** — pick the model per purpose (provider/model/effort for
+  chat/search/development/analysis), set the default profile, append free-form
+  text to the system prompt, and adjust effort / permission default / max
+  iterations. Changes are saved to the config file; model/profile edits apply to
+  new sessions and scheduled runs.
+
+The chat page is a single page that submits tasks over a WebSocket and streams the
 agent's text and tool activity live. The Telegram bot gives each chat its own
 session and **persists that chat's history** to
 `/workspace/.work-agent/sessions/telegram-<chat_id>.json`, so it remembers the

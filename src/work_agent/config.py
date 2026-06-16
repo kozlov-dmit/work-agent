@@ -72,6 +72,9 @@ class Config:
     default_profile: str = "chat"
     profiles: dict[str, dict] = field(default_factory=dict)
 
+    # Free-form text appended to the system prompt (editable from the dashboard).
+    system_prompt_extra: str = ""
+
     workdir: str = "/workspace"
 
     # Where this config was loaded from / should be saved to (not serialized).
@@ -112,6 +115,7 @@ class Config:
 
         cfg.default_profile = data.get("default_profile", cfg.default_profile)
         cfg.profiles = data.get("profiles", cfg.profiles)
+        cfg.system_prompt_extra = data.get("system_prompt_extra", cfg.system_prompt_extra)
 
         cfg.workdir = data.get("sandbox", {}).get("workdir", cfg.workdir)
 
@@ -171,6 +175,7 @@ class Config:
             },
             "default_profile": self.default_profile,
             "profiles": self.profiles,
+            "system_prompt_extra": self.system_prompt_extra,
             "tools": {
                 "enabled": self.enabled_tools,
                 "permissions": {
@@ -180,6 +185,33 @@ class Config:
             },
             "sandbox": {"workdir": self.workdir},
         }
+
+    def update_from(self, payload: dict) -> None:
+        """Apply an allowlisted subset of fields (used by the dashboard editor)."""
+        if "default_profile" in payload:
+            self.default_profile = str(payload["default_profile"])
+        if "system_prompt_extra" in payload:
+            self.system_prompt_extra = str(payload["system_prompt_extra"])
+        if "effort" in payload:
+            self.effort = str(payload["effort"])
+        if "max_iterations" in payload:
+            self.max_iterations = int(payload["max_iterations"])
+        if "permission_default" in payload and payload["permission_default"] in (
+            "allow",
+            "ask",
+            "deny",
+        ):
+            self.permission_default = payload["permission_default"]
+        if isinstance(payload.get("profiles"), dict):
+            self.profiles = payload["profiles"]
+        comp = payload.get("compaction")
+        if isinstance(comp, dict):
+            if "enabled" in comp:
+                self.compaction_enabled = bool(comp["enabled"])
+            if "threshold_tokens" in comp:
+                self.compaction_threshold_tokens = int(comp["threshold_tokens"])
+            if "keep_recent" in comp:
+                self.compaction_keep_recent = int(comp["keep_recent"])
 
     def save(self, path: str | None = None) -> str:
         target = Path(path or self.source_path or _DEFAULT_SAVE_PATH)
