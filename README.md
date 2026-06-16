@@ -75,8 +75,10 @@ The web server also serves a **dashboard** at `/dashboard`:
 
 - **Metrics** — CPU / memory / network (via `psutil`), token usage (input /
   output / total), and LLM reliability (success rate, requests, failures,
-  refusals) plus tool call/error counts. Auto-refreshes. Metrics are
-  per-process (the process serving the dashboard).
+  refusals) plus tool call/error counts. Auto-refreshes. Token/reliability/tool
+  counters are **aggregated across all processes** (web, telegram, scheduler) via
+  a shared SQLite store on the volume; CPU/memory/net reflect the process serving
+  the dashboard.
 - **Scheduled tasks** — view, add, enable/disable, and delete cron jobs.
 - **Config** — pick the model per purpose (provider/model/effort for
   chat/search/development/analysis), set the default profile, append free-form

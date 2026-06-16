@@ -2,12 +2,13 @@ from pathlib import Path
 
 from work_agent.config import Config
 from work_agent.frontends.web import _DASHBOARD_HTML, create_app
-from work_agent.metrics import Metrics
+from work_agent.metrics import MetricsStore
 from work_agent.providers.base import Usage
 
 
-def test_metrics_counters_and_snapshot():
-    m = Metrics()
+def test_metrics_counters_and_snapshot(tmp_path):
+    m = MetricsStore()
+    m.configure(tmp_path)
     m.record_llm(Usage(input_tokens=100, output_tokens=20), ok=True)
     m.record_llm(None, ok=False)
     m.record_llm(Usage(input_tokens=5, output_tokens=5), ok=True, refusal=True)
@@ -23,6 +24,23 @@ def test_metrics_counters_and_snapshot():
     assert snap["llm"]["reliability"] == round(2 / 3, 4)
     assert snap["tools"] == {"calls": 2, "errors": 1}
     assert "available" in snap["system"]
+
+
+def test_metrics_aggregate_across_stores(tmp_path):
+    # Two MetricsStore instances on the same state dir stand in for two processes
+    # (web / telegram / scheduler) sharing the volume.
+    a = MetricsStore(); a.configure(tmp_path)
+    b = MetricsStore(); b.configure(tmp_path)
+
+    a.record_llm(Usage(input_tokens=10, output_tokens=5), ok=True)
+    b.record_llm(Usage(input_tokens=20, output_tokens=10), ok=False)
+    b.record_tool(ok=False)
+
+    snap = a.snapshot()  # reading from either sees the combined totals
+    assert snap["tokens"]["total"] == 45
+    assert snap["llm"]["requests"] == 2
+    assert snap["llm"]["failures"] == 1
+    assert snap["tools"] == {"calls": 1, "errors": 1}
 
 
 def test_config_update_from_allowlist():

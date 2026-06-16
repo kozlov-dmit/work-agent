@@ -324,6 +324,9 @@ def create_app(config: Config):
 
     app = FastAPI(title="work-agent")
 
+    # Read aggregated metrics from the shared store at the state dir.
+    METRICS.configure(Path(config.workdir) / ".work-agent")
+
     def _store() -> ScheduleStore:
         return ScheduleStore(Path(config.workdir) / ".work-agent")
 

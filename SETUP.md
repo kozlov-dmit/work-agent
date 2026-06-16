@@ -286,6 +286,7 @@ docker compose up scheduler
 | `sessions/telegram-<chat_id>.json` | история Telegram-чатов |
 | `schedules.json` | запланированные cron-задачи |
 | `schedule-output/<id>/` | результаты задач при доставке в лог |
+| `metrics.db` | общие метрики (SQLite), агрегируются со всех процессов |
 | `config.yaml` | конфиг, если агент сохранил его сюда |
 
 В `docker-compose.yml` каталог `./workspace` хоста смонтирован в `/workspace`, а
