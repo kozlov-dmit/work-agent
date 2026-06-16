@@ -54,6 +54,12 @@ class Config:
     effort: str = "high"
     max_iterations: int = 50
 
+    # Conversation compaction: when estimated history tokens exceed the
+    # threshold, older turns are summarized and recent turns kept verbatim.
+    compaction_enabled: bool = True
+    compaction_threshold_tokens: int = 40000
+    compaction_keep_recent: int = 12
+
     enabled_tools: list[str] = field(default_factory=lambda: list(_DEFAULT_TOOLS))
     permission_default: str = "ask"  # allow | ask | deny
     permission_overrides: dict[str, str] = field(default_factory=dict)
@@ -89,6 +95,13 @@ class Config:
         agent = data.get("agent", {})
         cfg.effort = agent.get("effort", cfg.effort)
         cfg.max_iterations = agent.get("max_iterations", cfg.max_iterations)
+
+        compaction = data.get("compaction", {})
+        cfg.compaction_enabled = compaction.get("enabled", cfg.compaction_enabled)
+        cfg.compaction_threshold_tokens = compaction.get(
+            "threshold_tokens", cfg.compaction_threshold_tokens
+        )
+        cfg.compaction_keep_recent = compaction.get("keep_recent", cfg.compaction_keep_recent)
 
         tools = data.get("tools", {})
         cfg.enabled_tools = tools.get("enabled", cfg.enabled_tools)
@@ -150,6 +163,11 @@ class Config:
             "api_key_env": self.api_key_env,
             "base_url": self.base_url,
             "agent": {"max_iterations": self.max_iterations, "effort": self.effort},
+            "compaction": {
+                "enabled": self.compaction_enabled,
+                "threshold_tokens": self.compaction_threshold_tokens,
+                "keep_recent": self.compaction_keep_recent,
+            },
             "default_profile": self.default_profile,
             "profiles": self.profiles,
             "tools": {

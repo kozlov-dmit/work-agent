@@ -10,6 +10,11 @@ agent:
   max_iterations: 50
   effort: high                 # anthropic only: low | medium | high | xhigh | max
 
+compaction:
+  enabled: true
+  threshold_tokens: 40000      # summarize older turns past this (raise for big-context models like Claude)
+  keep_recent: 12              # most recent messages kept verbatim (snapped to a turn boundary)
+
 # Route different purposes to different LLMs. The primary loop runs
 # `default_profile`; the `delegate` tool sends subtasks to a specialist profile.
 # Each profile inherits any field it doesn't set from the top-level config.

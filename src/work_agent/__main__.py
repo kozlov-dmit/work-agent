@@ -30,6 +30,7 @@ def _build_agent(config: Config, yolo: bool) -> Agent:
             f"[green]✓ {n}[/]" if not r.is_error else f"[red]✗ {n}[/]"
         ),
         on_denied=lambda c: console.print(f"[red]denied: {c.name}[/]"),
+        on_compaction=lambda n: console.print(f"[dim]🗜 compacted history ({n} messages)[/]"),
     )
 
     return build_agent(

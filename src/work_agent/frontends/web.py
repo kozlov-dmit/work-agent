@@ -71,6 +71,7 @@ _INDEX_HTML = """<!doctype html>
     else if (m.type === "tool_call") add("tool", "→ " + m.name + " " + JSON.stringify(m.arguments));
     else if (m.type === "tool_result") add("tool" + (m.is_error ? " err" : ""), (m.is_error ? "✗ " : "✓ ") + m.name);
     else if (m.type === "denied") add("tool err", "denied: " + m.name);
+    else if (m.type === "compaction") add("tool", "🗜 compacted history (" + m.messages + " messages)");
     else if (m.type === "done") { send.disabled = false; input.disabled = false; input.focus(); }
     else if (m.type === "error") { add("agent err", m.text); send.disabled = false; input.disabled = false; }
   };
@@ -124,6 +125,7 @@ def create_app(config: Config):
                 {"type": "tool_result", "name": n, "is_error": r.is_error}
             ),
             on_denied=lambda c: emit({"type": "denied", "name": c.name}),
+            on_compaction=lambda n: emit({"type": "compaction", "messages": n}),
         )
 
         try:

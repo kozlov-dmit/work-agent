@@ -60,6 +60,7 @@ class AgentEvents:
     on_tool_call: Callable[[ToolCall], None] = lambda _c: None
     on_tool_result: Callable[[str, ToolResult], None] = lambda _n, _r: None
     on_denied: Callable[[ToolCall], None] = lambda _c: None
+    on_compaction: Callable[[int], None] = lambda _n: None
 
 
 @dataclass
@@ -75,6 +76,7 @@ class Agent:
     state_dir: Path | None = None  # persistent dir for provisioning / saved config
     profile_role: str = "chat"  # which purpose this agent serves
     depth: int = 0  # delegation depth (0 = primary chat agent)
+    compactor: object | None = None  # work_agent.context.Compactor
 
     def system_prompt(self) -> str:
         role_intro = ROLE_INSTRUCTIONS.get(self.profile_role)
@@ -99,6 +101,11 @@ class Agent:
         system = self.system_prompt()
 
         for _ in range(self.max_iterations):
+            if self.compactor is not None:
+                self.history, compacted = self.compactor.maybe_compact(self.history)
+                if compacted:
+                    self.events.on_compaction(len(self.history))
+
             response = self.provider.complete(
                 system=system,
                 messages=self.history,

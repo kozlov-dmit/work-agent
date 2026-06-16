@@ -26,6 +26,9 @@ See [DESIGN.md](DESIGN.md) for the full architecture.
 - **Per-purpose model routing.** Configure different LLMs for different purposes
   (chat, search, development, analysis). The conversational model orchestrates
   and routes focused subtasks to the right specialist via the `delegate` tool.
+- **Conversation compaction.** Long histories are automatically summarized
+  (provider-agnostic) past a configurable threshold, keeping recent turns
+  verbatim — so sessions don't blow the context window.
 - **Permission policy.** Per-tool `allow` / `ask` / `deny` gating, with an
   interactive prompt and a `--yolo` auto-approve mode.
 - **Multiple frontends.** CLI (REPL / one-shot), a **web chat server**, and a
