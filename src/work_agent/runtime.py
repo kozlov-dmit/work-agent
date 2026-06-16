@@ -31,11 +31,14 @@ def build_agent(
         overrides=config.permission_overrides,
         confirm=confirm or auto_allow,
     )
+    workdir = Path(config.workdir)
     return Agent(
         provider=provider,
         registry=registry,
         policy=policy,
-        workdir=Path(config.workdir),
+        workdir=workdir,
         max_iterations=config.max_iterations,
         events=events or AgentEvents(),
+        config=config,
+        state_dir=workdir / ".work-agent",
     )

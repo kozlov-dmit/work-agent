@@ -37,11 +37,18 @@ class Agent:
     max_iterations: int = 50
     events: AgentEvents = field(default_factory=AgentEvents)
     history: list[Message] = field(default_factory=list)
+    config: object | None = None  # work_agent.config.Config — for self-configuration
+    state_dir: Path | None = None  # persistent dir for provisioning / saved config
 
     def run_turn(self, user_input: str) -> str:
         """Run one user turn to completion, returning the final assistant text."""
         self.history.append(Message(role="user", text=user_input))
-        ctx = ToolContext(workdir=self.workdir)
+        ctx = ToolContext(
+            workdir=self.workdir,
+            state_dir=self.state_dir,
+            config=self.config,
+            registry=self.registry,
+        )
         final_text = ""
 
         for _ in range(self.max_iterations):

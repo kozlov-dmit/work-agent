@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..base import Tool
 from .files import EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from .http import HttpRequestTool
+from .selfmanage import ConfigureTool, InstallTool
 from .shell import BashTool
 
 
@@ -17,4 +18,6 @@ def all_builtins() -> list[Tool]:
         GlobTool(),
         GrepTool(),
         HttpRequestTool(),
+        InstallTool(),
+        ConfigureTool(),
     ]

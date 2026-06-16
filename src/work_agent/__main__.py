@@ -87,6 +87,16 @@ def cmd_telegram(config: Config) -> int:
     return 0
 
 
+def cmd_bootstrap(config: Config) -> int:
+    """Replay the self-provisioning manifest (run at container startup)."""
+    from .provisioning import Provisioning
+
+    state_dir = Path(config.workdir) / ".work-agent"
+    report = Provisioning(state_dir).apply_all()
+    console.print(report or "[dim]nothing to provision[/]")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="work-agent")
     parser.add_argument("--config", help="Path to config.yaml")
@@ -105,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     p_serve.add_argument("--port", type=int, default=8000)
 
     sub.add_parser("telegram", help="Run the Telegram bot (TELEGRAM_BOT_TOKEN)")
+    sub.add_parser("bootstrap", help="Replay self-provisioned tools (startup hook)")
 
     args = parser.parse_args(argv)
     config = Config.load(args.config)
@@ -120,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_serve(config, args.host, args.port)
         if args.command == "telegram":
             return cmd_telegram(config)
+        if args.command == "bootstrap":
+            return cmd_bootstrap(config)
     except RuntimeError as e:
         console.print(f"[red]Error:[/] {e}")
         return 1

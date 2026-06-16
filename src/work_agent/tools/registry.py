@@ -18,6 +18,9 @@ class ToolRegistry:
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
+    def remove(self, name: str) -> bool:
+        return self._tools.pop(name, None) is not None
+
     def names(self) -> list[str]:
         return sorted(self._tools)
 
