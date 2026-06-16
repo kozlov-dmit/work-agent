@@ -19,6 +19,9 @@ See [DESIGN.md](DESIGN.md) for the full architecture.
   tools (`install_tool` — apt/pip/npm) and edit its own config (`configure` —
   enable/disable tools, change model/effort/permissions). Installs persist
   across container restarts; tool enable/disable takes effect immediately.
+- **Skills.** Reusable task instructions the agent reads on demand (`skill`) and
+  authors itself (`skill_write`) — it captures your corrections into skills so it
+  improves over time. Skills persist across sessions.
 - **Permission policy.** Per-tool `allow` / `ask` / `deny` gating, with an
   interactive prompt and a `--yolo` auto-approve mode.
 - **Multiple frontends.** CLI (REPL / one-shot), a **web chat server**, and a
@@ -88,6 +91,22 @@ Both are mutating tools and default to the `ask` permission (auto-approved in th
 web/Telegram frontends; the container is the isolation boundary). The image
 grants the `agent` user passwordless `sudo` so `apt` installs work — treat the
 container as single-tenant and untrusted-by-default.
+
+## Skills
+
+Skills are reusable, task-specific instructions stored as
+`/workspace/.work-agent/skills/<name>/SKILL.md` (YAML frontmatter + markdown
+body), so they survive container restarts. Each skill's name and description are
+listed in the system prompt; the agent loads the full body on demand:
+
+- **`skill`** (read-only) — `list` available skills, `read` one's full content.
+- **`skill_write`** — `create` a new skill, `append` a correction/note to an
+  existing one, or `edit` it.
+
+The agent is instructed to read a matching skill before doing a task it covers,
+and to persist your corrections and reusable procedures as skills — so feedback
+in one session improves behavior in later ones. `skill` defaults to `allow`;
+`skill_write` is mutating and defaults to `ask`.
 
 ## Configuration
 

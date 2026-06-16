@@ -22,6 +22,8 @@ _DEFAULT_TOOLS = [
     "http_request",
     "install_tool",
     "configure",
+    "skill",
+    "skill_write",
 ]
 
 # Where to look for a config file when none is passed explicitly, and where the
