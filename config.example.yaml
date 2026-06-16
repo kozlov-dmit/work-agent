@@ -10,13 +10,19 @@ agent:
   effort: high                 # anthropic only: low | medium | high | xhigh | max
 
 tools:
-  enabled: [bash, read, write, edit, glob, grep, http_request]
+  # install_tool: install apt/pip/npm packages into the container (self-provision)
+  # configure:    let the agent change its own config / enable-disable tools
+  # skill/skill_write: use and author reusable task instructions (skills)
+  enabled: [bash, read, write, edit, glob, grep, http_request,
+            install_tool, configure, skill, skill_write]
   permissions:
     default: ask               # allow | ask | deny
     overrides:
       read: allow
       glob: allow
       grep: allow
+      skill: allow             # read-only (list/read skills)
+      # install_tool, configure, skill_write are mutating — keep at 'ask'.
 
 sandbox:
   workdir: /workspace

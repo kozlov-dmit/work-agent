@@ -15,6 +15,13 @@ See [DESIGN.md](DESIGN.md) for the full architecture.
   `openai` SDK — vLLM, Ollama, OpenRouter). Selected via config.
 - **Built-in tools.** `bash`, `read`, `write`, `edit`, `glob`, `grep`,
   `http_request`. File tools are confined to the working directory.
+- **Self-provisioning & self-configuration.** The agent can install its own
+  tools (`install_tool` — apt/pip/npm) and edit its own config (`configure` —
+  enable/disable tools, change model/effort/permissions). Installs persist
+  across container restarts; tool enable/disable takes effect immediately.
+- **Skills.** Reusable task instructions the agent reads on demand (`skill`) and
+  authors itself (`skill_write`) — it captures your corrections into skills so it
+  improves over time. Skills persist across sessions.
 - **Permission policy.** Per-tool `allow` / `ask` / `deny` gating, with an
   interactive prompt and a `--yolo` auto-approve mode.
 - **Multiple frontends.** CLI (REPL / one-shot), a **web chat server**, and a
@@ -65,6 +72,41 @@ mkdir -p workspace            # files the agent works on
 docker compose run --rm work-agent chat
 docker compose run --rm work-agent run "create a hello.py and run it"
 ```
+
+## Self-provisioning & self-configuration
+
+The agent can extend and reconfigure itself at runtime:
+
+- **`install_tool`** installs `apt` / `pip` / `npm` packages into the container.
+  Each install is recorded in `/workspace/.work-agent/provisioning.json`, and the
+  Docker entrypoint replays it via `work-agent bootstrap` on startup — so
+  self-installed tools survive container recreation (the `/workspace` volume
+  persists the manifest).
+- **`configure`** reads/writes the agent's own config: `enable_tool` /
+  `disable_tool` (applied to the live tool registry immediately) and `set`
+  (model, provider, base_url, effort, max_iterations, permission_default —
+  persisted; some apply on next start).
+
+Both are mutating tools and default to the `ask` permission (auto-approved in the
+web/Telegram frontends; the container is the isolation boundary). The image
+grants the `agent` user passwordless `sudo` so `apt` installs work — treat the
+container as single-tenant and untrusted-by-default.
+
+## Skills
+
+Skills are reusable, task-specific instructions stored as
+`/workspace/.work-agent/skills/<name>/SKILL.md` (YAML frontmatter + markdown
+body), so they survive container restarts. Each skill's name and description are
+listed in the system prompt; the agent loads the full body on demand:
+
+- **`skill`** (read-only) — `list` available skills, `read` one's full content.
+- **`skill_write`** — `create` a new skill, `append` a correction/note to an
+  existing one, or `edit` it.
+
+The agent is instructed to read a matching skill before doing a task it covers,
+and to persist your corrections and reusable procedures as skills — so feedback
+in one session improves behavior in later ones. `skill` defaults to `allow`;
+`skill_write` is mutating and defaults to `ask`.
 
 ## Configuration
 

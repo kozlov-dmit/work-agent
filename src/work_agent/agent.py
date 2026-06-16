@@ -8,9 +8,10 @@ from typing import Callable
 
 from .permissions import PermissionPolicy
 from .providers.base import LLMProvider, Message, ToolCall, ToolResult
+from .skills import skills_system_section
 from .tools import ToolContext, ToolRegistry
 
-SYSTEM_PROMPT = (
+BASE_SYSTEM_PROMPT = (
     "You are work-agent, an autonomous assistant running inside a container. "
     "You accomplish the user's task by reasoning and calling tools. "
     "Prefer concrete actions over narration. When the task is done, stop and "
@@ -37,16 +38,30 @@ class Agent:
     max_iterations: int = 50
     events: AgentEvents = field(default_factory=AgentEvents)
     history: list[Message] = field(default_factory=list)
+    config: object | None = None  # work_agent.config.Config — for self-configuration
+    state_dir: Path | None = None  # persistent dir for provisioning / saved config
+
+    def system_prompt(self) -> str:
+        prompt = BASE_SYSTEM_PROMPT
+        if self.state_dir is not None:
+            prompt += skills_system_section(self.state_dir / "skills")
+        return prompt
 
     def run_turn(self, user_input: str) -> str:
         """Run one user turn to completion, returning the final assistant text."""
         self.history.append(Message(role="user", text=user_input))
-        ctx = ToolContext(workdir=self.workdir)
+        ctx = ToolContext(
+            workdir=self.workdir,
+            state_dir=self.state_dir,
+            config=self.config,
+            registry=self.registry,
+        )
         final_text = ""
+        system = self.system_prompt()
 
         for _ in range(self.max_iterations):
             response = self.provider.complete(
-                system=SYSTEM_PROMPT,
+                system=system,
                 messages=self.history,
                 tools=self.registry.specs(),
             )

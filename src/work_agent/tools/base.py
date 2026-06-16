@@ -4,14 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass
 class ToolContext:
-    """Ambient state passed to every tool invocation."""
+    """Ambient state passed to every tool invocation.
+
+    ``config`` and ``registry`` let self-management tools (``configure``)
+    inspect and mutate the running agent; ``state_dir`` is the persistent
+    directory used for provisioning and saved config.
+    """
 
     workdir: Path
+    state_dir: Path | None = None
+    config: Any | None = None  # work_agent.config.Config
+    registry: Any | None = None  # work_agent.tools.registry.ToolRegistry
 
 
 @dataclass
