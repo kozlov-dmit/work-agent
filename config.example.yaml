@@ -1,0 +1,28 @@
+# Copy to config.yaml and adjust. Secrets stay in the environment, never here.
+
+provider: anthropic            # anthropic | openai_compatible
+model: claude-opus-4-8         # for openai_compatible, the endpoint's model name
+api_key_env: ANTHROPIC_API_KEY # name of the env var holding the API key
+base_url: null                 # for openai_compatible: vLLM/Ollama/OpenRouter URL
+
+agent:
+  max_iterations: 50
+  effort: high                 # anthropic only: low | medium | high | xhigh | max
+
+tools:
+  enabled: [bash, read, write, edit, glob, grep, http_request]
+  permissions:
+    default: ask               # allow | ask | deny
+    overrides:
+      read: allow
+      glob: allow
+      grep: allow
+
+sandbox:
+  workdir: /workspace
+
+# Example: point at a local Ollama instead of Claude
+# provider: openai_compatible
+# model: llama3.1
+# api_key_env: OPENAI_API_KEY
+# base_url: http://host.docker.internal:11434/v1

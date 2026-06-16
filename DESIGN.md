@@ -1,0 +1,240 @@
+# work-agent — дизайн
+
+Автономный агент-ассистент, который поднимается в Docker, подключается к
+указанной LLM (мульти-провайдер) и выполняет произвольные действия через
+набор инструментов. Концептуально близок к hermes-agent / openclaw, но с
+акцентом на провайдеро-независимость и расширяемость.
+
+## 1. Цели и принципы
+
+- **Провайдеро-независимость.** Один и тот же агентный цикл работает поверх
+  Anthropic (Claude) и любого OpenAI-совместимого эндпоинта (vLLM, Ollama,
+  OpenRouter, локальные модели). Выбор — через конфиг, без правок кода.
+- **Расширяемость без правок ядра.** Инструменты подключаются как плагины
+  (entry points) и как MCP-серверы.
+- **Безопасность по умолчанию.** «Любые действия» выполняются внутри
+  изолированного контейнера, опасные операции проходят через политику
+  разрешений (allow / ask / deny).
+- **Наблюдаемость.** Каждый шаг цикла, каждый вызов инструмента и каждый
+  запрос к LLM логируются структурированно.
+
+## 2. Архитектура (слои)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Точки входа: CLI (REPL / one-shot), опц. HTTP API            │
+├──────────────────────────────────────────────────────────────┤
+│  Agent loop (оркестратор)                                      │
+│   - ведёт историю, гоняет цикл tool-use, применяет политику    │
+│   - компакция контекста на длинных сессиях                     │
+├───────────────┬───────────────────────┬──────────────────────┤
+│ LLM-провайдеры │  Tool registry         │  Context / Memory     │
+│ (абстракция)   │  (built-in + плагины   │  - история сообщений  │
+│  - Anthropic   │   + MCP-клиент)        │  - компакция          │
+│  - OpenAI-совм.│                        │  - файловая память    │
+├───────────────┴───────────────────────┴──────────────────────┤
+│  Sandbox: контейнер Docker (рабочая директория, ограничения)  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 2.1 Слой LLM-провайдеров
+
+Внутренний формат сообщений и tool-call'ов нормализован; каждый провайдер
+конвертирует его в свой нативный API и обратно.
+
+```python
+class LLMResponse:
+    text: str | None
+    tool_calls: list[ToolCall]      # нормализованные: id, name, arguments(dict)
+    stop_reason: str                # "end_turn" | "tool_use" | "max_tokens" | "refusal"
+    usage: Usage
+
+class LLMProvider(Protocol):
+    def complete(
+        self,
+        system: str,
+        messages: list[Message],
+        tools: list[ToolSpec],
+        stream: bool = True,
+    ) -> LLMResponse: ...
+```
+
+- **AnthropicProvider** — официальный SDK `anthropic`.
+  - Модель по умолчанию `claude-opus-4-8`; `thinking={"type":"adaptive"}`,
+    `output_config={"effort":"high"}`.
+  - Стриминг по умолчанию (`messages.stream()` + `get_final_message()`), чтобы
+    не упираться в таймауты на длинных ответах.
+  - Нативный tool-use: `tool_use` блоки → `ToolCall`, результаты → `tool_result`.
+  - Промпт-кэширование стабильного префикса (system + tools).
+  - Обработка `stop_reason == "refusal"` до чтения content.
+- **OpenAICompatProvider** — официальный SDK `openai` с настраиваемым
+  `base_url` и `api_key`. Покрывает vLLM / Ollama / OpenRouter / облака с
+  `/chat/completions`. Tool-use через `tools` + `tool_calls`.
+
+> Важно: для Claude используется именно `anthropic` SDK, не OpenAI-shim —
+> так корректно работают нативные thinking/tool-use. Это два настоящих SDK за
+> общим интерфейсом, провайдер выбирается в конфиге.
+
+### 2.2 Agent loop
+
+Ручной агентный цикл (а не «магия» SDK), чтобы вставлять гейтинг, логи и
+человека-в-цикле:
+
+```
+1. Собрать system + историю + спецификации инструментов
+2. Запросить LLM (стриминг)
+3. stop_reason == end_turn? → отдать ответ, ждать ввод
+   stop_reason == refusal? → показать причину, не повторять вслепую
+4. Для каждого tool_call:
+     - проверить политику разрешений (allow / ask / deny)
+     - выполнить инструмент в sandbox, собрать результат (или is_error)
+5. Добавить assistant-ход + tool_result'ы в историю
+6. Если контекст близок к лимиту → компакция
+7. goto 2
+```
+
+### 2.3 Tool registry и инструменты
+
+Единый реестр; источники инструментов:
+
+1. **Built-in** (ядро):
+   - `bash` — выполнение команд в контейнере (тайм-аут, лимит вывода).
+   - Файлы: `read`, `write`, `edit`, `glob`, `grep` (в пределах workdir).
+   - `http_request` — запросы к внешним API.
+   - `web_search` / `web_fetch` — поиск и получение страниц.
+2. **Плагины** — сторонние инструменты через Python entry points
+   (`work_agent.tools`), регистрируются автоматически при установке пакета.
+3. **MCP** — клиент Model Context Protocol: инструменты внешних MCP-серверов
+   (stdio и URL) маппятся в реестр без правок ядра.
+
+Спецификация инструмента провайдеро-независима (имя, описание, JSON Schema
+входа) и конвертируется под формат каждого провайдера.
+
+```python
+class Tool(Protocol):
+    name: str
+    description: str
+    input_schema: dict          # JSON Schema
+    parallel_safe: bool         # можно ли запускать параллельно (read-only)
+    def run(self, args: dict, ctx: ToolContext) -> ToolResult: ...
+```
+
+### 2.4 Безопасность и политика разрешений
+
+Поскольку агент делает «любые действия», ядро — гейтинг:
+
+- Политики на инструмент: `always_allow` / `ask` / `deny`.
+- Разумные дефолты: read-only (`read`, `glob`, `grep`, `web_*`) — allow;
+  мутирующие/необратимые (`bash`, `write`, `edit`, `http_request POST/...`) —
+  `ask` в интерактиве, конфигурируемо в автономном режиме.
+- Изоляция: всё исполняется внутри контейнера; запись ограничена workdir;
+  сеть управляется политикой (см. Docker).
+- Режим `--yolo` (auto-approve) — явный осознанный выбор, не по умолчанию.
+
+### 2.5 Контекст и память
+
+- История сообщений в нормализованном формате.
+- Компакция длинных сессий (server-side у Anthropic; суммаризация-фолбэк для
+  OpenAI-совместимых).
+- Опциональная файловая память (`/memories`) для переноса знаний между
+  сессиями.
+
+## 3. Конфигурация
+
+Источники (по возрастанию приоритета): дефолты → `config.yaml` → переменные
+окружения → флаги CLI.
+
+```yaml
+provider: anthropic            # anthropic | openai_compatible
+model: claude-opus-4-8         # для openai_compatible — имя модели эндпоинта
+api_key_env: ANTHROPIC_API_KEY # имя env-переменной с ключом
+base_url: null                 # для openai_compatible (vLLM/Ollama/OpenRouter)
+
+agent:
+  max_iterations: 50
+  effort: high                 # anthropic: low|medium|high|xhigh|max
+
+tools:
+  enabled: [bash, read, write, edit, glob, grep, http_request, web_search, web_fetch]
+  permissions:
+    default: ask
+    overrides:
+      read: always_allow
+      glob: always_allow
+      grep: always_allow
+
+mcp_servers:
+  - { name: my-tools, transport: url, url: "https://example/mcp" }
+
+sandbox:
+  workdir: /workspace
+  network: restricted          # restricted | unrestricted
+```
+
+Секреты — только через env, никогда в репозитории/образе.
+
+## 4. Docker
+
+- **Образ**: slim-Python, непривилегированный пользователь, инструменты CLI
+  (git и т.п.), установленный пакет агента.
+- **Workdir**: `/workspace` — точка монтирования рабочих файлов (volume).
+- **Секреты**: ключи через переменные окружения / docker secrets.
+- **Сеть**: по умолчанию ограниченная egress-политика; `unrestricted` —
+  осознанный выбор.
+- **Запуск**: интерактивный REPL (`docker run -it`) либо one-shot задача
+  (`docker run ... work-agent run "задача"`).
+- `docker-compose.yml` для удобного локального запуска с volume и env-файлом.
+
+## 5. Точки входа (CLI)
+
+```
+work-agent chat                 # интерактивный REPL
+work-agent run "<задача>"       # автономный one-shot
+work-agent --config config.yaml ...
+work-agent tools list           # показать доступные инструменты
+```
+(Опционально позже: `work-agent serve` — HTTP API для интеграций.)
+
+## 6. Структура проекта (предлагаемая)
+
+```
+work-agent/
+├── pyproject.toml
+├── Dockerfile
+├── docker-compose.yml
+├── config.example.yaml
+├── src/work_agent/
+│   ├── __main__.py            # CLI
+│   ├── config.py
+│   ├── agent.py               # agent loop
+│   ├── context.py             # история + компакция
+│   ├── providers/
+│   │   ├── base.py            # LLMProvider, нормализованные типы
+│   │   ├── anthropic.py
+│   │   └── openai_compat.py
+│   ├── tools/
+│   │   ├── registry.py
+│   │   ├── builtin/           # bash, files, http, web
+│   │   ├── plugins.py         # загрузка entry points
+│   │   └── mcp.py             # MCP-клиент
+│   ├── permissions.py
+│   └── sandbox.py
+└── tests/
+```
+
+## 7. Этапы реализации
+
+1. **Каркас**: пакет, конфиг, типы провайдеров, реестр инструментов, CLI-скелет.
+2. **Anthropic-провайдер** + agent loop + 2–3 built-in инструмента (bash, read, write).
+3. **Политика разрешений** + остальные built-in (edit, glob, grep, http, web).
+4. **OpenAI-совместимый провайдер** (vLLM/Ollama).
+5. **Плагины (entry points) + MCP-клиент.**
+6. **Docker / compose**, компакция контекста, наблюдаемость, тесты.
+
+## 8. Открытые вопросы
+
+- Стартовый CLI-UX: чистый stdin/stdout REPL или TUI (rich/textual)?
+- Нужен ли HTTP API (`serve`) в MVP или позже?
+- Уровень изоляции: достаточно одного контейнера, или нужен запуск каждого
+  `bash` в эфемерном дочернем sandbox?
+```

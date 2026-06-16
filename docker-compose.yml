@@ -1,0 +1,15 @@
+services:
+  work-agent:
+    build: .
+    image: work-agent:latest
+    stdin_open: true
+    tty: true
+    env_file:
+      - .env
+    volumes:
+      # Mount your project so the agent can read/write files in /workspace.
+      - ./workspace:/workspace
+      # Optional: provide a custom config.
+      - ./config.yaml:/app/config.yaml:ro
+    # Override the default `chat` with e.g.:
+    #   docker compose run --rm work-agent run "your task"
