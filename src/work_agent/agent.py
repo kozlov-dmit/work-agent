@@ -18,6 +18,39 @@ BASE_SYSTEM_PROMPT = (
     "report the outcome plainly."
 )
 
+ROLE_INSTRUCTIONS = {
+    "search": (
+        "You are the research specialist. Find and synthesize information from the "
+        "web and available sources, cite where it came from, and return concise findings."
+    ),
+    "development": (
+        "You are the development specialist. Write, modify, and run code carefully; "
+        "prefer minimal changes and verify with tests or execution where possible."
+    ),
+    "analysis": (
+        "You are the data-analysis specialist. Inspect the data, compute results, "
+        "and explain your findings with concrete evidence."
+    ),
+}
+
+
+def _delegation_section(config) -> str:
+    from .config import SPECIALIST_ROLES
+
+    lines = []
+    for role in SPECIALIST_ROLES:
+        p = (config.profiles or {}).get(role) or {}
+        provider = p.get("provider", config.provider)
+        model = p.get("model") or "(default model)"
+        lines.append(f"- {role}: {provider} / {model}")
+    return (
+        "\n\n## Specialist models\n"
+        "You can route a focused subtask to a purpose-specific model with the "
+        "`delegate` tool. Configured specialists:\n" + "\n".join(lines) + "\n"
+        "Delegate substantial search / development / analysis subtasks; handle the "
+        "conversation and orchestration yourself."
+    )
+
 
 @dataclass
 class AgentEvents:
@@ -40,11 +73,16 @@ class Agent:
     history: list[Message] = field(default_factory=list)
     config: object | None = None  # work_agent.config.Config — for self-configuration
     state_dir: Path | None = None  # persistent dir for provisioning / saved config
+    profile_role: str = "chat"  # which purpose this agent serves
+    depth: int = 0  # delegation depth (0 = primary chat agent)
 
     def system_prompt(self) -> str:
-        prompt = BASE_SYSTEM_PROMPT
+        role_intro = ROLE_INSTRUCTIONS.get(self.profile_role)
+        prompt = f"{role_intro}\n\n{BASE_SYSTEM_PROMPT}" if role_intro else BASE_SYSTEM_PROMPT
         if self.state_dir is not None:
             prompt += skills_system_section(self.state_dir / "skills")
+        if self.depth == 0 and self.config is not None and self.registry.get("delegate"):
+            prompt += _delegation_section(self.config)
         return prompt
 
     def run_turn(self, user_input: str) -> str:
@@ -55,6 +93,7 @@ class Agent:
             state_dir=self.state_dir,
             config=self.config,
             registry=self.registry,
+            agent=self,
         )
         final_text = ""
         system = self.system_prompt()

@@ -24,7 +24,9 @@ def build_agent(
     """
     from .permissions import auto_allow
 
-    provider = build_provider(config)
+    # The primary loop runs the default profile (purpose: chat); specialist
+    # profiles are used on demand by the `delegate` tool.
+    provider = build_provider(config.profile(config.default_profile))
     registry = build_registry(config.enabled_tools)
     policy = PermissionPolicy(
         default=config.permission_default,
@@ -41,4 +43,5 @@ def build_agent(
         events=events or AgentEvents(),
         config=config,
         state_dir=workdir / ".work-agent",
+        profile_role=config.default_profile,
     )

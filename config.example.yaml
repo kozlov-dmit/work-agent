@@ -10,12 +10,33 @@ agent:
   max_iterations: 50
   effort: high                 # anthropic only: low | medium | high | xhigh | max
 
+# Route different purposes to different LLMs. The primary loop runs
+# `default_profile`; the `delegate` tool sends subtasks to a specialist profile.
+# Each profile inherits any field it doesn't set from the top-level config.
+default_profile: chat
+profiles:
+  chat:
+    provider: anthropic
+    model: claude-opus-4-8
+  search:
+    provider: deepseek          # e.g. a research/search-tuned endpoint
+    model: deepseek-chat
+  development:
+    provider: anthropic
+    model: claude-opus-4-8
+    effort: xhigh
+  analysis:
+    provider: openai_compatible
+    model: llama3.1
+    base_url: http://host.docker.internal:11434/v1
+
 tools:
   # install_tool: install apt/pip/npm packages into the container (self-provision)
   # configure:    let the agent change its own config / enable-disable tools
   # skill/skill_write: use and author reusable task instructions (skills)
+  # delegate: route a subtask to a purpose-specific model (see profiles above)
   enabled: [bash, read, write, edit, glob, grep, http_request,
-            install_tool, configure, skill, skill_write]
+            install_tool, configure, skill, skill_write, delegate]
   permissions:
     default: ask               # allow | ask | deny
     overrides:
@@ -23,6 +44,7 @@ tools:
       glob: allow
       grep: allow
       skill: allow             # read-only (list/read skills)
+      delegate: allow          # routing only; the specialist's actions stay gated
       # install_tool, configure, skill_write are mutating — keep at 'ask'.
 
 sandbox:

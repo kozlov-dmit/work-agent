@@ -20,6 +20,7 @@ class ToolContext:
     state_dir: Path | None = None
     config: Any | None = None  # work_agent.config.Config
     registry: Any | None = None  # work_agent.tools.registry.ToolRegistry
+    agent: Any | None = None  # work_agent.agent.Agent (for delegation)
 
 
 @dataclass

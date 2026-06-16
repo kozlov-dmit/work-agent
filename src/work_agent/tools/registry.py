@@ -21,6 +21,12 @@ class ToolRegistry:
     def remove(self, name: str) -> bool:
         return self._tools.pop(name, None) is not None
 
+    def clone_without(self, name: str) -> "ToolRegistry":
+        """A shallow copy of the registry with one tool removed (for sub-agents)."""
+        clone = ToolRegistry()
+        clone._tools = {n: t for n, t in self._tools.items() if n != name}
+        return clone
+
     def names(self) -> list[str]:
         return sorted(self._tools)
 
