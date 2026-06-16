@@ -6,6 +6,7 @@ also serializable back to disk. ``source_path`` remembers where to save.
 
 from __future__ import annotations
 
+import copy
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,7 +25,11 @@ _DEFAULT_TOOLS = [
     "configure",
     "skill",
     "skill_write",
+    "delegate",
 ]
+
+# Specialist roles the agent can delegate to via the `delegate` tool.
+SPECIALIST_ROLES = ("search", "development", "analysis")
 
 # Where to look for a config file when none is passed explicitly, and where the
 # agent saves self-configuration by default.
@@ -52,6 +57,13 @@ class Config:
     enabled_tools: list[str] = field(default_factory=lambda: list(_DEFAULT_TOOLS))
     permission_default: str = "ask"  # allow | ask | deny
     permission_overrides: dict[str, str] = field(default_factory=dict)
+
+    # Per-purpose model routing. The primary loop runs `default_profile`; the
+    # `delegate` tool routes subtasks to a named profile (search/development/
+    # analysis/...). Each profile may override provider/model/api_key_env/
+    # base_url/effort; unset fields fall back to the top-level values.
+    default_profile: str = "chat"
+    profiles: dict[str, dict] = field(default_factory=dict)
 
     workdir: str = "/workspace"
 
@@ -84,6 +96,9 @@ class Config:
         cfg.permission_default = perms.get("default", cfg.permission_default)
         cfg.permission_overrides = perms.get("overrides", cfg.permission_overrides)
 
+        cfg.default_profile = data.get("default_profile", cfg.default_profile)
+        cfg.profiles = data.get("profiles", cfg.profiles)
+
         cfg.workdir = data.get("sandbox", {}).get("workdir", cfg.workdir)
 
         # Environment overrides (highest precedence).
@@ -97,6 +112,37 @@ class Config:
         cfg.source_path = chosen or os.environ.get("WORK_AGENT_CONFIG") or None
         return cfg
 
+    def profile(self, role: str) -> "Config":
+        """Return a copy of this config with the named profile's overrides applied.
+
+        Unknown roles return the base config unchanged, so delegation still works
+        (using the default model) even when a profile isn't configured.
+        """
+        eff = copy.copy(self)
+        p = self.profiles.get(role)
+        if not p:
+            return eff
+
+        prov = p.get("provider", self.provider)
+        eff.provider = prov
+        # When switching provider without naming a model, let the new provider
+        # use its own default rather than carrying over the chat model.
+        if "model" in p:
+            eff.model = p["model"]
+        elif prov != self.provider:
+            eff.model = None
+        if "api_key_env" in p:
+            eff.api_key_env = p["api_key_env"]
+        elif prov != self.provider:
+            # Sentinel: build_provider auto-resolves the provider's default key env.
+            eff.api_key_env = "ANTHROPIC_API_KEY"
+        if "base_url" in p:
+            eff.base_url = p["base_url"]
+        elif prov != self.provider:
+            eff.base_url = None
+        eff.effort = p.get("effort", self.effort)
+        return eff
+
     def to_dict(self) -> dict:
         return {
             "provider": self.provider,
@@ -104,6 +150,8 @@ class Config:
             "api_key_env": self.api_key_env,
             "base_url": self.base_url,
             "agent": {"max_iterations": self.max_iterations, "effort": self.effort},
+            "default_profile": self.default_profile,
+            "profiles": self.profiles,
             "tools": {
                 "enabled": self.enabled_tools,
                 "permissions": {

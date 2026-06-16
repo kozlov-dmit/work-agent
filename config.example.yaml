@@ -1,20 +1,42 @@
 # Copy to config.yaml and adjust. Secrets stay in the environment, never here.
 
-provider: anthropic            # anthropic | openai_compatible
-model: claude-opus-4-8         # for openai_compatible, the endpoint's model name
-api_key_env: ANTHROPIC_API_KEY # name of the env var holding the API key
+provider: anthropic            # anthropic | deepseek | openai_compatible
+model: claude-opus-4-8         # for non-anthropic, the endpoint's model name
+api_key_env: ANTHROPIC_API_KEY # env var with the API key (per-provider default
+                               # used automatically if left at this value)
 base_url: null                 # for openai_compatible: vLLM/Ollama/OpenRouter URL
 
 agent:
   max_iterations: 50
   effort: high                 # anthropic only: low | medium | high | xhigh | max
 
+# Route different purposes to different LLMs. The primary loop runs
+# `default_profile`; the `delegate` tool sends subtasks to a specialist profile.
+# Each profile inherits any field it doesn't set from the top-level config.
+default_profile: chat
+profiles:
+  chat:
+    provider: anthropic
+    model: claude-opus-4-8
+  search:
+    provider: deepseek          # e.g. a research/search-tuned endpoint
+    model: deepseek-chat
+  development:
+    provider: anthropic
+    model: claude-opus-4-8
+    effort: xhigh
+  analysis:
+    provider: openai_compatible
+    model: llama3.1
+    base_url: http://host.docker.internal:11434/v1
+
 tools:
   # install_tool: install apt/pip/npm packages into the container (self-provision)
   # configure:    let the agent change its own config / enable-disable tools
   # skill/skill_write: use and author reusable task instructions (skills)
+  # delegate: route a subtask to a purpose-specific model (see profiles above)
   enabled: [bash, read, write, edit, glob, grep, http_request,
-            install_tool, configure, skill, skill_write]
+            install_tool, configure, skill, skill_write, delegate]
   permissions:
     default: ask               # allow | ask | deny
     overrides:
@@ -22,10 +44,15 @@ tools:
       glob: allow
       grep: allow
       skill: allow             # read-only (list/read skills)
+      delegate: allow          # routing only; the specialist's actions stay gated
       # install_tool, configure, skill_write are mutating — keep at 'ask'.
 
 sandbox:
   workdir: /workspace
+
+# Example: DeepSeek (set DEEPSEEK_API_KEY)
+# provider: deepseek
+# model: deepseek-chat          # deepseek-chat supports tool use; reasoner is limited
 
 # Example: point at a local Ollama instead of Claude
 # provider: openai_compatible

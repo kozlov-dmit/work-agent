@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ..base import Tool
+from .delegate import DelegateTool
 from .files import EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from .http import HttpRequestTool
 from .selfmanage import ConfigureTool, InstallTool
@@ -23,4 +24,5 @@ def all_builtins() -> list[Tool]:
         ConfigureTool(),
         SkillTool(),
         SkillWriteTool(),
+        DelegateTool(),
     ]

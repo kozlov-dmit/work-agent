@@ -70,6 +70,14 @@ class LLMProvider(Protocol):
 - **OpenAICompatProvider** — официальный SDK `openai` с настраиваемым
   `base_url` и `api_key`. Покрывает vLLM / Ollama / OpenRouter / облака с
   `/chat/completions`. Tool-use через `tools` + `tool_calls`.
+- **DeepSeekProvider** — DeepSeek даёт OpenAI-совместимый API, поэтому это тонкая
+  надстройка над `OpenAICompatProvider` с дефолтами DeepSeek (`base_url`
+  `https://api.deepseek.com`, модель `deepseek-chat`, ключ `DEEPSEEK_API_KEY`).
+  `deepseek-chat` поддерживает function calling; `deepseek-reasoner` — ограниченно.
+
+`build_provider` подставляет дефолтную env-переменную ключа по провайдеру
+(`ANTHROPIC_API_KEY` / `DEEPSEEK_API_KEY` / `OPENAI_API_KEY`), если `api_key_env`
+оставлен по умолчанию.
 
 > Важно: для Claude используется именно `anthropic` SDK, не OpenAI-shim —
 > так корректно работают нативные thinking/tool-use. Это два настоящих SDK за
@@ -220,6 +228,27 @@ sandbox:
 
 Реестр модулей: `skills.py` (`SkillStore`, `skills_system_section`) и
 `tools/builtin/skills.py` (инструменты).
+
+## 3c. Маршрутизация моделей по целям (profiles + delegate)
+
+Под разные цели — разные LLM: общение, поиск, разработка, анализ данных.
+
+- **Профили** (`config.profiles`): `имя_роли → {provider, model, api_key_env,
+  base_url, effort}`. Незаданные поля наследуются от верхнеуровневого конфига.
+  Основной цикл работает на `default_profile` (по умолчанию `chat`).
+- **`Config.profile(role)`** возвращает копию конфига с применёнными
+  оверрайдами; при смене провайдера без явной модели подставляется дефолт
+  провайдера, а ключ авто-резолвится в `build_provider`.
+- **`delegate`** (инструмент): основной разговорный агент делегирует профильную
+  подзадачу специалисту (`search` / `development` / `analysis`). Специалист —
+  это суб-агент с провайдером своего профиля, тем же реестром инструментов
+  (минус `delegate`), той же политикой и рабочей директорией; выполняет один
+  ход и возвращает результат. Глубина делегирования ограничена (chat → 1
+  уровень), рекурсия исключена.
+- В системный промпт chat-агента добавляется ростер специалистов; суб-агенты
+  получают роль-специфичную инструкцию (`ROLE_INSTRUCTIONS`).
+- Безопасность: `delegate` лишь маршрутизирует; вызовы инструментов внутри
+  специалиста проходят ту же политику разрешений.
 
 ## 4. Docker
 

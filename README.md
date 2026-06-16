@@ -11,8 +11,9 @@ See [DESIGN.md](DESIGN.md) for the full architecture.
 ## Features
 
 - **Provider-agnostic.** One agent loop over Anthropic (official `anthropic`
-  SDK, default `claude-opus-4-8`) and OpenAI-compatible endpoints (official
-  `openai` SDK — vLLM, Ollama, OpenRouter). Selected via config.
+  SDK, default `claude-opus-4-8`), **DeepSeek** (`deepseek-chat` by default), and
+  any OpenAI-compatible endpoint (official `openai` SDK — vLLM, Ollama,
+  OpenRouter). Selected via config.
 - **Built-in tools.** `bash`, `read`, `write`, `edit`, `glob`, `grep`,
   `http_request`. File tools are confined to the working directory.
 - **Self-provisioning & self-configuration.** The agent can install its own
@@ -22,6 +23,9 @@ See [DESIGN.md](DESIGN.md) for the full architecture.
 - **Skills.** Reusable task instructions the agent reads on demand (`skill`) and
   authors itself (`skill_write`) — it captures your corrections into skills so it
   improves over time. Skills persist across sessions.
+- **Per-purpose model routing.** Configure different LLMs for different purposes
+  (chat, search, development, analysis). The conversational model orchestrates
+  and routes focused subtasks to the right specialist via the `delegate` tool.
 - **Permission policy.** Per-tool `allow` / `ask` / `deny` gating, with an
   interactive prompt and a `--yolo` auto-approve mode.
 - **Multiple frontends.** CLI (REPL / one-shot), a **web chat server**, and a
@@ -111,8 +115,39 @@ in one session improves behavior in later ones. `skill` defaults to `allow`;
 ## Configuration
 
 Defaults < `config.yaml` < environment variables < CLI flags. See
-[config.example.yaml](config.example.yaml). Point at a local model by switching
-`provider` to `openai_compatible` and setting `base_url`.
+[config.example.yaml](config.example.yaml).
+
+- **DeepSeek:** set `provider: deepseek` and `DEEPSEEK_API_KEY` (defaults to
+  `deepseek-chat`; use `deepseek-chat` for tool use — `deepseek-reasoner` has
+  limited function-calling support).
+- **Local / other:** set `provider: openai_compatible` with `base_url` (e.g. a
+  local Ollama or vLLM server).
+
+Each provider has a default API-key env var (`ANTHROPIC_API_KEY`,
+`DEEPSEEK_API_KEY`, `OPENAI_API_KEY`), used automatically when `api_key_env` is
+left at its default.
+
+### Per-purpose model routing
+
+Use `profiles` to give each purpose its own LLM, and `default_profile` for the
+primary conversation:
+
+```yaml
+default_profile: chat
+profiles:
+  chat:        { provider: anthropic, model: claude-opus-4-8 }
+  search:      { provider: deepseek,  model: deepseek-chat }
+  development: { provider: anthropic, model: claude-opus-4-8, effort: xhigh }
+  analysis:    { provider: openai_compatible, model: llama3.1,
+                 base_url: http://host.docker.internal:11434/v1 }
+```
+
+The chat model runs the conversation and calls `delegate(role, task)` to hand a
+focused subtask to the `search` / `development` / `analysis` specialist, which
+runs with its own model and the same tools and returns its result. A profile
+inherits any field it doesn't set from the top-level config; an unconfigured
+role falls back to the default model. The specialist's own tool calls stay
+subject to the permission policy.
 
 ## Tests
 
