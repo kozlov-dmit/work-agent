@@ -45,9 +45,13 @@ def run_telegram(config: Config) -> None:
     if not token:
         raise RuntimeError("Missing bot token: set $TELEGRAM_BOT_TOKEN")
 
+    from ..metrics import METRICS
     from ..sessions import SessionStore
 
-    store = SessionStore(Path(config.workdir) / ".work-agent")
+    state_dir = Path(config.workdir) / ".work-agent"
+    METRICS.configure(state_dir)
+    METRICS.start_system_reporter("telegram")
+    store = SessionStore(state_dir)
     agents: dict[int, Agent] = {}
 
     def session_id(chat_id: int) -> str:

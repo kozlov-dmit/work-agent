@@ -104,9 +104,12 @@ def cmd_scheduler(config: Config) -> int:
     import functools
     import os
 
+    from .metrics import METRICS
     from .scheduler import Scheduler, default_deliver
 
     state_dir = Path(config.workdir) / ".work-agent"
+    METRICS.configure(state_dir)
+    METRICS.start_system_reporter("scheduler")
     bot = None
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if token:

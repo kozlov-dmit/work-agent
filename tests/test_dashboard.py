@@ -23,7 +23,20 @@ def test_metrics_counters_and_snapshot(tmp_path):
     assert snap["llm"]["refusals"] == 1
     assert snap["llm"]["reliability"] == round(2 / 3, 4)
     assert snap["tools"] == {"calls": 2, "errors": 1}
-    assert "available" in snap["system"]
+    assert isinstance(snap["systems"], list)
+
+
+def test_system_samples_per_service(tmp_path):
+    m = MetricsStore()
+    m.configure(tmp_path)
+    m.record_system("web")
+    m.record_system("scheduler")
+
+    systems = {s["service"]: s for s in m.snapshot()["systems"]}
+    assert {"web", "scheduler"} <= set(systems)
+    row = systems["web"]
+    for key in ("cpu_percent", "mem_percent", "mem_rss_mb", "net_sent_mb", "age_seconds"):
+        assert key in row
 
 
 def test_metrics_aggregate_across_stores(tmp_path):
@@ -102,7 +115,7 @@ def test_dashboard_api_endpoints(tmp_path: Path):
     client = TestClient(create_app(cfg))
 
     assert client.get("/dashboard").status_code == 200
-    assert set(client.get("/api/metrics").json()) >= {"tokens", "llm", "tools", "system"}
+    assert set(client.get("/api/metrics").json()) >= {"tokens", "llm", "tools", "systems"}
 
     # POST body must be accepted (regression: forward-ref annotations broke this).
     r = client.post("/api/config", json={"system_prompt_extra": "be terse", "effort": "low"})

@@ -179,8 +179,13 @@ _DASHBOARD_HTML = """<!doctype html>
 </div></nav>
 <main>
   <section id="metrics" class="active">
-    <p class="subtitle">Live runtime metrics for this process.</p>
-    <div class="cards" id="sys"></div>
+    <p class="subtitle">Token, reliability and tool counters are aggregated across
+      all services; system metrics are shown per service.</p>
+    <h3>System — per service</h3>
+    <div class="panel">
+      <table><thead><tr><th>service</th><th>cpu</th><th>mem</th><th>rss</th>
+        <th>net ↑ / ↓</th><th>updated</th></tr></thead><tbody id="sys-body"></tbody></table>
+    </div>
     <h3>Tokens &amp; reliability</h3>
     <div class="cards" id="usage"></div>
     <p class="muted" id="uptime"></p>
@@ -237,12 +242,13 @@ _DASHBOARD_HTML = """<!doctype html>
 
   async function loadMetrics() {
     const m = await (await fetch("/api/metrics")).json();
-    const s = m.system || {};
-    $("sys").innerHTML = s.available
-      ? card(s.cpu_percent + "%", "CPU") + card(s.memory_percent + "%", "Memory")
-        + card(s.memory_used_mb + " / " + s.memory_total_mb + " MB", "RAM used")
-        + card(s.net_sent_mb + " / " + s.net_recv_mb + " MB", "Net sent / recv")
-      : card("n/a", "System metrics (install psutil)");
+    const rows = (m.systems || []);
+    $("sys-body").innerHTML = rows.length ? rows.map((s) => `<tr>
+      <td>${s.service}</td><td>${s.cpu_percent}%</td><td>${s.mem_percent}%</td>
+      <td class="mono">${s.mem_rss_mb} MB</td>
+      <td class="mono">${s.net_sent_mb} / ${s.net_recv_mb} MB</td>
+      <td class="muted">${s.age_seconds}s ago</td></tr>`).join("")
+      : `<tr><td colspan="6" class="muted">no samples yet (install psutil / start a service)</td></tr>`;
     const rel = (m.llm.reliability * 100).toFixed(1);
     $("usage").innerHTML = card(m.tokens.total.toLocaleString(), "Tokens total")
       + card(m.tokens.input.toLocaleString() + " / " + m.tokens.output.toLocaleString(), "Input / output")
@@ -459,4 +465,10 @@ def run_web(config: Config, host: str, port: int) -> None:
         raise RuntimeError(
             "Web extras not installed. Run: pip install 'work-agent[web]'"
         ) from e
+    from pathlib import Path
+
+    from ..metrics import METRICS
+
+    METRICS.configure(Path(config.workdir) / ".work-agent")
+    METRICS.start_system_reporter("web")
     uvicorn.run(create_app(config), host=host, port=port)

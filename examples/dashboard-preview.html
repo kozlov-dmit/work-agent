@@ -90,8 +90,13 @@
 </div></nav>
 <main>
   <section id="metrics" class="active">
-    <p class="subtitle">Live runtime metrics for this process.</p>
-    <div class="cards" id="sys"></div>
+    <p class="subtitle">Token, reliability and tool counters are aggregated across
+      all services; system metrics are shown per service.</p>
+    <h3>System — per service</h3>
+    <div class="panel">
+      <table><thead><tr><th>service</th><th>cpu</th><th>mem</th><th>rss</th>
+        <th>net ↑ / ↓</th><th>updated</th></tr></thead><tbody id="sys-body"></tbody></table>
+    </div>
     <h3>Tokens &amp; reliability</h3>
     <div class="cards" id="usage"></div>
     <p class="muted" id="uptime"></p>
@@ -145,9 +150,14 @@
     tokens: { input: 184320, output: 51234, total: 235554 },
     llm: { requests: 312, failures: 3, refusals: 1, reliability: 0.9904 },
     tools: { calls: 487, errors: 12 },
-    system: { available: true, cpu_percent: 23.4, memory_percent: 41.2,
-              memory_used_mb: 3312.5, memory_total_mb: 8042.0,
-              net_sent_mb: 128.7, net_recv_mb: 542.3 },
+    systems: [
+      { service: "web", cpu_percent: 4.2, mem_percent: 1.8, mem_rss_mb: 148.3,
+        net_sent_mb: 12.7, net_recv_mb: 88.1, age_seconds: 2 },
+      { service: "telegram", cpu_percent: 1.1, mem_percent: 1.4, mem_rss_mb: 121.0,
+        net_sent_mb: 5.3, net_recv_mb: 9.8, age_seconds: 3 },
+      { service: "scheduler", cpu_percent: 23.4, mem_percent: 2.6, mem_rss_mb: 210.5,
+        net_sent_mb: 64.2, net_recv_mb: 402.7, age_seconds: 1 },
+    ],
   };
   const MOCK_TASKS = [
     { id: "39c0cc1e", cron: "0 9 * * *", delivery: { type: "telegram" },
@@ -179,12 +189,12 @@
   const jitter = (n, d) => Math.max(0, +(n + (Math.random() - 0.5) * d).toFixed(1));
 
   function renderMetrics() {
-    const m = MOCK_METRICS, s = m.system;
-    const cpu = jitter(s.cpu_percent, 8), mem = jitter(s.memory_percent, 3);
-    $("sys").innerHTML =
-      card(cpu + "%", "CPU") + card(mem + "%", "Memory")
-      + card(s.memory_used_mb + " / " + s.memory_total_mb + " MB", "RAM used")
-      + card(s.net_sent_mb + " / " + s.net_recv_mb + " MB", "Net sent / recv");
+    const m = MOCK_METRICS;
+    $("sys-body").innerHTML = m.systems.map((s) => `<tr>
+      <td>${s.service}</td><td>${jitter(s.cpu_percent, 6)}%</td><td>${s.mem_percent}%</td>
+      <td class="mono">${s.mem_rss_mb} MB</td>
+      <td class="mono">${s.net_sent_mb} / ${s.net_recv_mb} MB</td>
+      <td class="muted">${s.age_seconds}s ago</td></tr>`).join("");
     $("usage").innerHTML =
       card(m.tokens.total.toLocaleString(), "Tokens total")
       + card(m.tokens.input.toLocaleString() + " / " + m.tokens.output.toLocaleString(), "Input / output")
