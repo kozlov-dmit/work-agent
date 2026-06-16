@@ -28,17 +28,23 @@ Docker. Краткий обзор — в [README.md](README.md), архитек�
 git clone https://github.com/kozlov-dmit/work-agent.git
 cd work-agent
 
-cp .env.example .env            # вписать ключи
+cp .env.example .env            # вписать ключи (+ TELEGRAM_BOT_TOKEN при необходимости)
 cp config.example.yaml config.yaml
 mkdir -p workspace              # рабочие файлы агента (volume)
 
-docker compose build
+docker compose up               # поднимает web (дашборд) + telegram + scheduler
+# → дашборд: http://localhost:8000/dashboard
 ```
 
-Образ ставит агента вместе с extras `web` и `telegram`, поднимает
-непривилегированного пользователя `agent`, монтирует `/workspace`, открывает порт
-`8000`. При старте контейнера автоматически выполняется `work-agent bootstrap`
-(переустановка самостоятельно доустановленных инструментов).
+`docker compose up` поднимает **сразу три** долгоживущих сервиса: `web`
+(чат + дашборд на порту 8000), `telegram` (нужен `TELEGRAM_BOT_TOKEN`) и
+единственный `scheduler`. Образ ставит агента вместе с extras `web` и `telegram`,
+поднимает непривилегированного пользователя `agent`, монтирует `/workspace`. При
+старте контейнера автоматически выполняется `work-agent bootstrap` (переустановка
+самостоятельно доустановленных инструментов).
+
+Разовые команды по-прежнему доступны: `docker compose run --rm web chat`,
+`docker compose run --rm web run "задача"`.
 
 ### Вариант B. Локально (Python)
 
@@ -195,8 +201,8 @@ work-agent --yolo run "..."           # без подтверждений
 ```bash
 # локально
 work-agent serve --host 0.0.0.0 --port 8000
-# docker
-docker compose run --rm --service-ports work-agent serve
+# docker (входит в `docker compose up`); отдельно:
+docker compose up web
 ```
 
 - Чат: `http://localhost:8000/`
@@ -214,36 +220,39 @@ docker compose run --rm --service-ports work-agent serve
 ```bash
 export TELEGRAM_BOT_TOKEN=123456:ABC...
 work-agent telegram
-# docker
-docker compose run --rm work-agent telegram
+# docker (входит в `docker compose up`); отдельно:
+docker compose up telegram
 ```
 
 - Каждый чат — своя сессия; история **персистентна** (переживает рестарт),
   `/reset` очищает, `/start` — приветствие.
-- Бот **автоматически поднимает планировщик** и присылает результаты
-  запланированных задач в чат, который их создал.
+- Планировщик бот **не** запускает — этим занимается отдельный сервис
+  `scheduler` (см. ниже). Результаты задач, созданных из чата, приходят в этот же
+  чат (их доставляет сервис `scheduler`).
 
 ### Планировщик задач (cron)
 
 Агент создаёт задачи из диалога: напишите ему, например,
 «присылай новостной дайджест каждое утро в 9:00» — он зарегистрирует cron-задачу
-инструментом `schedule`.
+инструментом `schedule`. **Сама по себе задача планировщик не запускает** — её
+выполнит уже работающий сервис `scheduler` (он входит в `docker compose up`).
 
-Запуск фонового исполнителя:
+Запуск/управление:
 ```bash
 work-agent scheduler                  # отдельный процесс-исполнитель
 work-agent schedule list              # посмотреть задачи
 work-agent schedule remove <id>       # удалить задачу
-# docker (отдельный сервис)
-docker compose --profile scheduler up scheduler
+# docker — поднимается вместе со всеми по `docker compose up`; отдельно:
+docker compose up scheduler
 ```
 
+- **Планировщик ровно один** (этот сервис). Telegram-бот свой не поднимает —
+  поэтому задачи не срабатывают дважды. Стор общий, так что задачи из любого
+  фронтенда подхватываются.
 - Доставка результата: в Telegram-чат (если задача создана с такой целью и задан
   `TELEGRAM_BOT_TOKEN`) либо в файл
   `/workspace/.work-agent/schedule-output/<id>/`.
 - Время трактуется в таймзоне задачи (IANA), иначе — локальное время контейнера.
-- Telegram-бот уже запускает планировщик внутри себя — отдельный `scheduler`
-  нужен, если бот не используется.
 
 Формат cron: `минута час день месяц день_недели`. Примеры:
 `0 9 * * *` — каждый день в 09:00; `0 9 * * 1-5` — по будням в 09:00;
@@ -287,18 +296,27 @@ docker compose --profile scheduler up scheduler
 
 ## 8. Docker Compose — детали
 
-- Сервис `work-agent`: по умолчанию команда `chat`. Примеры:
-  ```bash
-  docker compose run --rm --service-ports work-agent serve
-  docker compose run --rm work-agent telegram
-  docker compose run --rm work-agent run "ваша задача"
-  ```
-- Сервис `scheduler` (профиль `scheduler`): автономный планировщик:
-  ```bash
-  docker compose --profile scheduler up scheduler
-  ```
-- Порт `8000` проброшен для веб-сервера (`--service-ports` при `run`, или
-  `up` для long-running сервисов).
+`docker compose up` поднимает три сервиса (общий образ через YAML-anchor,
+`restart: unless-stopped`):
+
+| Сервис | Команда | Назначение |
+|---|---|---|
+| `web` | `serve` | чат + дашборд на порту `8000` |
+| `telegram` | `telegram` | Telegram-бот (нужен `TELEGRAM_BOT_TOKEN`) |
+| `scheduler` | `scheduler` | единственный исполнитель cron-задач |
+
+```bash
+docker compose up                 # все три сервиса
+docker compose up web             # только дашборд/чат
+docker compose run --rm web chat  # разовый интерактивный чат
+docker compose run --rm web run "ваша задача"
+```
+
+- Порт `8000` проброшен сервисом `web`.
+- Планировщик ровно один (сервис `scheduler`); Telegram-бот свой не запускает —
+  двойного срабатывания задач нет.
+- Если `TELEGRAM_BOT_TOKEN` не задан, сервис `telegram` будет падать и
+  перезапускаться — закомментируйте его в `docker-compose.yml`, если бот не нужен.
 
 > **Модель доверия.** Контейнер — граница изоляции и считается single-tenant,
 > untrusted-by-default. Пользователю `agent` выдан беспарольный `sudo` (нужен для

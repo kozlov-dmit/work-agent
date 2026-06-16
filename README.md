@@ -99,11 +99,21 @@ overrides in config still apply.
 ## Quick start (Docker)
 
 ```bash
-cp .env.example .env          # add your API key
+cp .env.example .env          # add your API key (and TELEGRAM_BOT_TOKEN if used)
 cp config.example.yaml config.yaml
 mkdir -p workspace            # files the agent works on
-docker compose run --rm work-agent chat
-docker compose run --rm work-agent run "create a hello.py and run it"
+
+docker compose up             # starts web (dashboard) + telegram + scheduler
+# → dashboard at http://localhost:8000/dashboard
+```
+
+`docker compose up` brings up all three long-running services: **web** (chat +
+dashboard on port 8000), **telegram** (needs `TELEGRAM_BOT_TOKEN`), and the
+single **scheduler**. One-off commands still work:
+
+```bash
+docker compose run --rm web chat
+docker compose run --rm web run "create a hello.py and run it"
 ```
 
 ## Self-provisioning & self-configuration
@@ -141,10 +151,11 @@ work-agent schedule list       # inspect jobs
 work-agent schedule remove <id>
 ```
 
-The Telegram bot starts the scheduler automatically and delivers each job's
-result to the chat that created it. Standalone (`work-agent scheduler`), results
-go to a Telegram chat if the job was created with that target and
-`TELEGRAM_BOT_TOKEN` is set, otherwise to
+There is exactly one scheduler — the dedicated `scheduler` process/service (under
+`docker compose up` it's always running). The Telegram bot does **not** run its
+own, so tasks never fire twice. The scheduler reads the shared schedules file, so
+a job created from any frontend is picked up. Results go to a Telegram chat if the
+job was created with that target and `TELEGRAM_BOT_TOKEN` is set, otherwise to
 `/workspace/.work-agent/schedule-output/<id>/`. Cron times use the job's
 `timezone` (IANA) if set, else the container's local time. Scheduled jobs run
 autonomously with tools auto-approved (`deny` overrides still apply).

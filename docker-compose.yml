@@ -1,40 +1,44 @@
-services:
-  work-agent:
-    build: .
-    image: work-agent:latest
-    stdin_open: true
-    tty: true
-    env_file:
-      - .env
-    environment:
-      # The agent loads and self-edits this config file.
-      - WORK_AGENT_CONFIG=/app/config.yaml
-    ports:
-      # Web chat server (used by the `serve` command).
-      - "8000:8000"
-    volumes:
-      # Mount your project so the agent can read/write files in /workspace.
-      # Self-installed tools persist here under /workspace/.work-agent.
-      - ./workspace:/workspace
-      # Writable so the agent can reconfigure itself (run `cp config.example.yaml
-      # config.yaml` on the host first, or it will be created as a directory).
-      - ./config.yaml:/app/config.yaml
-    # Default is `chat`. Other frontends:
-    #   docker compose run --rm --service-ports work-agent serve
-    #   docker compose run --rm work-agent telegram   (also runs the scheduler)
-    #   docker compose run --rm work-agent run "your task"
+# `docker compose up` brings up all three long-running services:
+#   web       — chat + dashboard at http://localhost:8000
+#   telegram  — Telegram bot (needs TELEGRAM_BOT_TOKEN in .env)
+#   scheduler — the single cron scheduler that runs due tasks
+#
+# There is exactly one scheduler (this service). The Telegram bot does NOT run
+# its own, so tasks never fire twice. Tasks created from any frontend land in the
+# shared /workspace/.work-agent/schedules.json and are picked up here.
+#
+# One-off commands still work, e.g.:
+#   docker compose run --rm web run "your task"
+#   docker compose run --rm web chat
 
-  # Standalone cron scheduler (the Telegram bot already runs one internally).
-  # Enable with: docker compose --profile scheduler up scheduler
+x-base: &base
+  build: .
+  image: work-agent:latest
+  env_file:
+    - .env
+  environment:
+    # The agent loads and self-edits this config file.
+    - WORK_AGENT_CONFIG=/app/config.yaml
+  volumes:
+    # Mount your project so the agent can read/write files in /workspace.
+    # All persistent state lives under /workspace/.work-agent.
+    - ./workspace:/workspace
+    # Writable so the agent/dashboard can reconfigure itself (run
+    # `cp config.example.yaml config.yaml` on the host first).
+    - ./config.yaml:/app/config.yaml
+  restart: unless-stopped
+
+services:
+  web:
+    <<: *base
+    command: ["serve"]
+    ports:
+      - "8000:8000"
+
+  telegram:
+    <<: *base
+    command: ["telegram"]
+
   scheduler:
-    build: .
-    image: work-agent:latest
-    profiles: ["scheduler"]
-    env_file:
-      - .env
-    environment:
-      - WORK_AGENT_CONFIG=/app/config.yaml
-    volumes:
-      - ./workspace:/workspace
-      - ./config.yaml:/app/config.yaml
+    <<: *base
     command: ["scheduler"]
