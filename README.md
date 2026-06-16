@@ -11,8 +11,9 @@ See [DESIGN.md](DESIGN.md) for the full architecture.
 ## Features
 
 - **Provider-agnostic.** One agent loop over Anthropic (official `anthropic`
-  SDK, default `claude-opus-4-8`) and OpenAI-compatible endpoints (official
-  `openai` SDK — vLLM, Ollama, OpenRouter). Selected via config.
+  SDK, default `claude-opus-4-8`), **DeepSeek** (`deepseek-chat` by default), and
+  any OpenAI-compatible endpoint (official `openai` SDK — vLLM, Ollama,
+  OpenRouter). Selected via config.
 - **Built-in tools.** `bash`, `read`, `write`, `edit`, `glob`, `grep`,
   `http_request`. File tools are confined to the working directory.
 - **Self-provisioning & self-configuration.** The agent can install its own
@@ -111,8 +112,17 @@ in one session improves behavior in later ones. `skill` defaults to `allow`;
 ## Configuration
 
 Defaults < `config.yaml` < environment variables < CLI flags. See
-[config.example.yaml](config.example.yaml). Point at a local model by switching
-`provider` to `openai_compatible` and setting `base_url`.
+[config.example.yaml](config.example.yaml).
+
+- **DeepSeek:** set `provider: deepseek` and `DEEPSEEK_API_KEY` (defaults to
+  `deepseek-chat`; use `deepseek-chat` for tool use — `deepseek-reasoner` has
+  limited function-calling support).
+- **Local / other:** set `provider: openai_compatible` with `base_url` (e.g. a
+  local Ollama or vLLM server).
+
+Each provider has a default API-key env var (`ANTHROPIC_API_KEY`,
+`DEEPSEEK_API_KEY`, `OPENAI_API_KEY`), used automatically when `api_key_env` is
+left at its default.
 
 ## Tests
 

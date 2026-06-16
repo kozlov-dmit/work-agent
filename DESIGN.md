@@ -70,6 +70,14 @@ class LLMProvider(Protocol):
 - **OpenAICompatProvider** — официальный SDK `openai` с настраиваемым
   `base_url` и `api_key`. Покрывает vLLM / Ollama / OpenRouter / облака с
   `/chat/completions`. Tool-use через `tools` + `tool_calls`.
+- **DeepSeekProvider** — DeepSeek даёт OpenAI-совместимый API, поэтому это тонкая
+  надстройка над `OpenAICompatProvider` с дефолтами DeepSeek (`base_url`
+  `https://api.deepseek.com`, модель `deepseek-chat`, ключ `DEEPSEEK_API_KEY`).
+  `deepseek-chat` поддерживает function calling; `deepseek-reasoner` — ограниченно.
+
+`build_provider` подставляет дефолтную env-переменную ключа по провайдеру
+(`ANTHROPIC_API_KEY` / `DEEPSEEK_API_KEY` / `OPENAI_API_KEY`), если `api_key_env`
+оставлен по умолчанию.
 
 > Важно: для Claude используется именно `anthropic` SDK, не OpenAI-shim —
 > так корректно работают нативные thinking/tool-use. Это два настоящих SDK за

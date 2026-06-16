@@ -1,8 +1,9 @@
 # Copy to config.yaml and adjust. Secrets stay in the environment, never here.
 
-provider: anthropic            # anthropic | openai_compatible
-model: claude-opus-4-8         # for openai_compatible, the endpoint's model name
-api_key_env: ANTHROPIC_API_KEY # name of the env var holding the API key
+provider: anthropic            # anthropic | deepseek | openai_compatible
+model: claude-opus-4-8         # for non-anthropic, the endpoint's model name
+api_key_env: ANTHROPIC_API_KEY # env var with the API key (per-provider default
+                               # used automatically if left at this value)
 base_url: null                 # for openai_compatible: vLLM/Ollama/OpenRouter URL
 
 agent:
@@ -26,6 +27,10 @@ tools:
 
 sandbox:
   workdir: /workspace
+
+# Example: DeepSeek (set DEEPSEEK_API_KEY)
+# provider: deepseek
+# model: deepseek-chat          # deepseek-chat supports tool use; reasoner is limited
 
 # Example: point at a local Ollama instead of Claude
 # provider: openai_compatible
