@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from .metrics import METRICS
 from .permissions import PermissionPolicy
 from .providers.base import LLMProvider, Message, ToolCall, ToolResult
 from .skills import skills_system_section
@@ -60,6 +61,7 @@ class AgentEvents:
     on_tool_call: Callable[[ToolCall], None] = lambda _c: None
     on_tool_result: Callable[[str, ToolResult], None] = lambda _n, _r: None
     on_denied: Callable[[ToolCall], None] = lambda _c: None
+    on_compaction: Callable[[int], None] = lambda _n: None
 
 
 @dataclass
@@ -75,10 +77,15 @@ class Agent:
     state_dir: Path | None = None  # persistent dir for provisioning / saved config
     profile_role: str = "chat"  # which purpose this agent serves
     depth: int = 0  # delegation depth (0 = primary chat agent)
+    compactor: object | None = None  # work_agent.context.Compactor
+    delivery: dict | None = None  # default delivery target for scheduled tasks
 
     def system_prompt(self) -> str:
         role_intro = ROLE_INSTRUCTIONS.get(self.profile_role)
         prompt = f"{role_intro}\n\n{BASE_SYSTEM_PROMPT}" if role_intro else BASE_SYSTEM_PROMPT
+        extra = getattr(self.config, "system_prompt_extra", "") if self.config else ""
+        if extra:
+            prompt += f"\n\n{extra}"
         if self.state_dir is not None:
             prompt += skills_system_section(self.state_dir / "skills")
         if self.depth == 0 and self.config is not None and self.registry.get("delegate"):
@@ -94,15 +101,28 @@ class Agent:
             config=self.config,
             registry=self.registry,
             agent=self,
+            delivery=self.delivery,
         )
         final_text = ""
         system = self.system_prompt()
 
         for _ in range(self.max_iterations):
-            response = self.provider.complete(
-                system=system,
-                messages=self.history,
-                tools=self.registry.specs(),
+            if self.compactor is not None:
+                self.history, compacted = self.compactor.maybe_compact(self.history)
+                if compacted:
+                    self.events.on_compaction(len(self.history))
+
+            try:
+                response = self.provider.complete(
+                    system=system,
+                    messages=self.history,
+                    tools=self.registry.specs(),
+                )
+            except Exception:
+                METRICS.record_llm(None, ok=False)
+                raise
+            METRICS.record_llm(
+                response.usage, ok=True, refusal=response.stop_reason == "refusal"
             )
 
             if response.text:
@@ -136,8 +156,10 @@ class Agent:
         try:
             output = tool.run(call.arguments, ctx)
         except Exception as e:  # noqa: BLE001 - surface any tool failure to the model
+            METRICS.record_tool(ok=False)
             return ToolResult(call.id, f"Tool error: {e}", is_error=True)
 
+        METRICS.record_tool(ok=not output.is_error)
         result = ToolResult(call.id, output.content, is_error=output.is_error)
         self.events.on_tool_result(call.name, result)
         return result

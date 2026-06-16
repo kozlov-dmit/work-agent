@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>work-agent — dashboard (design preview)</title>
+<!--
+  Standalone DESIGN PREVIEW of the work-agent dashboard.
+  Uses mock data (no server). Open directly in a browser.
+  The live version is served at /dashboard by `work-agent serve`.
+-->
+<style>
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#fafbfc; --text:#1b1f27; --muted:#6b7280;
+    --border:#e7e9ee; --accent:#6366f1; --accent-weak:#eef0fe; --good:#16a34a; --bad:#e11d48;
+    --radius:14px; --shadow:0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0e1014; --surface:#161a21; --surface-2:#1b2029; --text:#e8eaf0; --muted:#99a1b0;
+      --border:#262c38; --accent:#818cf8; --accent-weak:#1e2435; --good:#34d399; --bad:#fb7185;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px rgba(0,0,0,.28);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased;
+         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color:var(--accent); text-decoration:none; }
+  .topbar { display:flex; align-items:center; gap:.7rem; padding:.85rem 1.25rem;
+            background:var(--surface); border-bottom:1px solid var(--border); }
+  .brand { display:flex; align-items:center; gap:.55rem; font-weight:650; letter-spacing:-.01em; }
+  .dot { width:.6rem; height:.6rem; border-radius:50%; background:var(--accent);
+         box-shadow:0 0 0 4px var(--accent-weak); }
+  .topbar .sep { margin-left:auto; color:var(--muted); font-size:.72rem; border:1px solid var(--border);
+                 border-radius:1rem; padding:.1rem .55rem; }
+  nav.tabs { display:flex; gap:.25rem; margin:1.1rem auto 0; max-width:920px; padding:.25rem 1.25rem; }
+  nav.tabs .seg { display:inline-flex; gap:.2rem; padding:.25rem; background:var(--surface-2);
+                  border:1px solid var(--border); border-radius:999px; }
+  nav.tabs button { border:0; background:transparent; color:var(--muted); padding:.45rem 1rem;
+                    border-radius:999px; cursor:pointer; font:inherit; font-weight:550; transition:.15s; }
+  nav.tabs button.active { background:var(--accent); color:#fff; }
+  main { max-width:920px; margin:0 auto; padding:1.25rem; }
+  .subtitle { color:var(--muted); font-size:.85rem; margin:.15rem 0 1rem; }
+  h3 { margin:1.6rem 0 .3rem; font-size:1rem; letter-spacing:-.01em; }
+  section { display:none; } section.active { display:block; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:.8rem; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+          padding:.85rem 1rem; box-shadow:var(--shadow); transition:transform .15s, box-shadow .15s; }
+  .card:hover { transform:translateY(-2px); }
+  .card .l { font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+             margin-bottom:.35rem; }
+  .card .v { font-size:1.55rem; font-weight:700; letter-spacing:-.02em; }
+  .panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+           box-shadow:var(--shadow); padding:.4rem 1.1rem 1.1rem; margin-top:.4rem; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; padding:.6rem; font-size:.68rem; text-transform:uppercase;
+       letter-spacing:.05em; color:var(--muted); }
+  td { padding:.55rem .6rem; border-top:1px solid var(--border); font-size:.9rem; }
+  tbody tr:hover { background:var(--surface-2); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.85em; }
+  .pill { display:inline-block; font-size:.68rem; font-weight:600; padding:.15rem .55rem; border-radius:999px; }
+  .pill.on { background:color-mix(in srgb, var(--good) 16%, transparent); color:var(--good); }
+  .pill.off { background:color-mix(in srgb, var(--bad) 16%, transparent); color:var(--bad); }
+  .iconbtn { border:1px solid var(--border); background:var(--surface); color:var(--text);
+             padding:.25rem .55rem; border-radius:.5rem; cursor:pointer; font:inherit; font-size:.8rem;
+             transition:.15s; }
+  .iconbtn:hover { border-color:var(--accent); color:var(--accent); }
+  label { display:block; margin:.7rem 0 .25rem; font-size:.8rem; color:var(--muted); }
+  input, select, textarea { width:100%; padding:.55rem .65rem; background:var(--surface-2);
+    border:1px solid var(--border); border-radius:.6rem; color:var(--text); font:inherit; transition:.15s; }
+  input:focus, select:focus, textarea:focus { outline:0; border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--accent-weak); }
+  textarea { min-height:6rem; resize:vertical; }
+  .row { display:flex; gap:.7rem; flex-wrap:wrap; } .row > * { flex:1 1 160px; }
+  .btn { margin-top:1rem; padding:.6rem 1.15rem; border:0; border-radius:.6rem; background:var(--accent);
+         color:#fff; font:inherit; font-weight:600; cursor:pointer; transition:.15s; }
+  .btn:hover { filter:brightness(1.07); }
+  .muted { color:var(--muted); font-size:.83rem; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="brand"><span class="dot"></span> work-agent</span>
+  <span class="sep">design preview · mock data</span>
+</div>
+<nav class="tabs"><div class="seg">
+  <button data-tab="metrics" class="active">Metrics</button>
+  <button data-tab="tasks">Scheduled tasks</button>
+  <button data-tab="config">Config</button>
+</div></nav>
+<main>
+  <section id="metrics" class="active">
+    <p class="subtitle">Token, reliability and tool counters are aggregated across
+      all services; system metrics are shown per service.</p>
+    <h3>System — per service</h3>
+    <div class="panel">
+      <table><thead><tr><th>service</th><th>cpu</th><th>mem</th><th>rss</th>
+        <th>net ↑ / ↓</th><th>updated</th></tr></thead><tbody id="sys-body"></tbody></table>
+    </div>
+    <h3>Tokens &amp; reliability</h3>
+    <div class="cards" id="usage"></div>
+    <p class="muted" id="uptime"></p>
+  </section>
+
+  <section id="tasks">
+    <p class="subtitle">Recurring background jobs run by the scheduler.</p>
+    <div class="panel">
+      <table><thead><tr><th>id</th><th>cron</th><th>deliver</th><th>status</th><th>next</th>
+        <th>task</th><th></th></tr></thead><tbody id="tasks-body"></tbody></table>
+    </div>
+    <h3>Add task</h3>
+    <div class="panel">
+      <div class="row">
+        <div><label>cron</label><input id="t-cron" value="0 9 * * *" /></div>
+        <div><label>timezone (optional)</label><input id="t-tz" placeholder="Europe/Moscow" /></div>
+      </div>
+      <label>task</label><input id="t-task" value="send a news digest" />
+      <button class="btn">Add task</button>
+      <p class="muted">Dashboard-created tasks deliver to a log file under
+        /workspace/.work-agent/schedule-output/.</p>
+    </div>
+  </section>
+
+  <section id="config">
+    <p class="subtitle">Pick a model per purpose and tune behaviour. Saved to the config file.</p>
+    <div class="panel">
+      <h3 style="margin-top:.6rem">Models per purpose</h3>
+      <div id="profiles"></div>
+      <label>Default profile</label><select id="c-default"></select>
+      <label>System prompt addendum (appended to every turn)</label>
+      <textarea id="c-extra">Always answer in Russian. Prefer concise, well-structured replies.</textarea>
+      <div class="row">
+        <div><label>Effort</label>
+          <select id="c-effort"><option>low</option><option>medium</option>
+            <option selected>high</option><option>xhigh</option><option>max</option></select></div>
+        <div><label>Permission default</label>
+          <select id="c-perm"><option>allow</option><option selected>ask</option><option>deny</option></select></div>
+        <div><label>Max iterations</label><input id="c-maxit" type="number" value="50" /></div>
+      </div>
+      <button class="btn">Save config</button>
+      <p class="muted">Preview only — buttons don't persist anything here.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+  // ---- Mock data (stands in for the /api/* responses) ----
+  const MOCK_METRICS = {
+    uptime_seconds: 4521,
+    tokens: { input: 184320, output: 51234, total: 235554 },
+    llm: { requests: 312, failures: 3, refusals: 1, reliability: 0.9904 },
+    tools: { calls: 487, errors: 12 },
+    systems: [
+      { service: "web", cpu_percent: 4.2, mem_percent: 1.8, mem_rss_mb: 148.3,
+        net_sent_mb: 12.7, net_recv_mb: 88.1, age_seconds: 2 },
+      { service: "telegram", cpu_percent: 1.1, mem_percent: 1.4, mem_rss_mb: 121.0,
+        net_sent_mb: 5.3, net_recv_mb: 9.8, age_seconds: 3 },
+      { service: "scheduler", cpu_percent: 23.4, mem_percent: 2.6, mem_rss_mb: 210.5,
+        net_sent_mb: 64.2, net_recv_mb: 402.7, age_seconds: 1 },
+    ],
+  };
+  const MOCK_TASKS = [
+    { id: "39c0cc1e", cron: "0 9 * * *", delivery: { type: "telegram" },
+      next_run: "2026-06-17T09:00:00", task: "Собрать и прислать дайджест ИИ-новостей", enabled: true },
+    { id: "7b1a4f02", cron: "0 18 * * 1-5", delivery: { type: "telegram" },
+      next_run: "2026-06-16T18:00:00", task: "Сводка задач за день из трекера", enabled: true },
+    { id: "c4e9d710", cron: "*/30 * * * *", delivery: { type: "log" },
+      next_run: "2026-06-16T10:00:00", task: "Проверить доступность сайта и записать статус", enabled: false },
+  ];
+  const MOCK_CONFIG = {
+    default_profile: "chat",
+    profiles: {
+      chat:        { provider: "anthropic", model: "claude-opus-4-8" },
+      search:      { provider: "deepseek", model: "deepseek-chat" },
+      development: { provider: "anthropic", model: "claude-opus-4-8", effort: "xhigh" },
+      analysis:    { provider: "openai_compatible", model: "llama3.1" },
+    },
+  };
+  const ROLES = ["chat", "search", "development", "analysis"];
+  const PROVIDERS = ["anthropic", "deepseek", "openai_compatible"];
+
+  const $ = (id) => document.getElementById(id);
+  document.querySelectorAll("nav button").forEach((b) => b.onclick = () => {
+    document.querySelectorAll("nav button").forEach((x) => x.classList.remove("active"));
+    document.querySelectorAll("section").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active"); $(b.dataset.tab).classList.add("active");
+  });
+  const card = (v, l) => `<div class="card"><div class="l">${l}</div><div class="v">${v}</div></div>`;
+  const jitter = (n, d) => Math.max(0, +(n + (Math.random() - 0.5) * d).toFixed(1));
+
+  function renderMetrics() {
+    const m = MOCK_METRICS;
+    $("sys-body").innerHTML = m.systems.map((s) => `<tr>
+      <td>${s.service}</td><td>${jitter(s.cpu_percent, 6)}%</td><td>${s.mem_percent}%</td>
+      <td class="mono">${s.mem_rss_mb} MB</td>
+      <td class="mono">${s.net_sent_mb} / ${s.net_recv_mb} MB</td>
+      <td class="muted">${s.age_seconds}s ago</td></tr>`).join("");
+    $("usage").innerHTML =
+      card(m.tokens.total.toLocaleString(), "Tokens total")
+      + card(m.tokens.input.toLocaleString() + " / " + m.tokens.output.toLocaleString(), "Input / output")
+      + card((m.llm.reliability * 100).toFixed(1) + "%", "LLM reliability")
+      + card(m.llm.requests, "LLM requests")
+      + card(m.llm.failures, "Failures")
+      + card(m.tools.calls + " / " + m.tools.errors, "Tool calls / errors");
+    $("uptime").textContent = "uptime: " + m.uptime_seconds + "s · refusals: " + m.llm.refusals;
+  }
+
+  function renderTasks() {
+    $("tasks-body").innerHTML = MOCK_TASKS.map((t) => `<tr>
+      <td class="mono">${t.id}</td><td class="mono">${t.cron}</td><td>${t.delivery.type}</td>
+      <td><span class="pill ${t.enabled ? "on" : "off"}">${t.enabled ? "on" : "off"}</span></td>
+      <td class="mono">${t.next_run}</td><td>${t.task.slice(0, 40)}</td>
+      <td><button class="iconbtn">${t.enabled ? "disable" : "enable"}</button>
+          <button class="iconbtn">delete</button></td></tr>`).join("");
+  }
+
+  function renderConfig() {
+    $("profiles").innerHTML = ROLES.map((role) => {
+      const p = MOCK_CONFIG.profiles[role] || {};
+      const opts = PROVIDERS.map((pr) => `<option ${pr === p.provider ? "selected" : ""}>${pr}</option>`).join("");
+      return `<div class="row" style="margin-bottom:.4rem"><div><label>${role} · provider</label>
+        <select><option value=""></option>${opts}</select></div>
+        <div><label>model</label><input value="${p.model || ""}" /></div>
+        <div><label>effort</label><input value="${p.effort || ""}" /></div></div>`;
+    }).join("");
+    $("c-default").innerHTML = ROLES.map((r) =>
+      `<option ${r === MOCK_CONFIG.default_profile ? "selected" : ""}>${r}</option>`).join("");
+  }
+
+  renderMetrics(); renderTasks(); renderConfig();
+  setInterval(renderMetrics, 3000);   // mimic the live auto-refresh
+</script>
+</body>
+</html>

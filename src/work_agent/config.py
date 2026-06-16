@@ -26,6 +26,7 @@ _DEFAULT_TOOLS = [
     "skill",
     "skill_write",
     "delegate",
+    "schedule",
 ]
 
 # Specialist roles the agent can delegate to via the `delegate` tool.
@@ -54,6 +55,12 @@ class Config:
     effort: str = "high"
     max_iterations: int = 50
 
+    # Conversation compaction: when estimated history tokens exceed the
+    # threshold, older turns are summarized and recent turns kept verbatim.
+    compaction_enabled: bool = True
+    compaction_threshold_tokens: int = 40000
+    compaction_keep_recent: int = 12
+
     enabled_tools: list[str] = field(default_factory=lambda: list(_DEFAULT_TOOLS))
     permission_default: str = "ask"  # allow | ask | deny
     permission_overrides: dict[str, str] = field(default_factory=dict)
@@ -64,6 +71,9 @@ class Config:
     # base_url/effort; unset fields fall back to the top-level values.
     default_profile: str = "chat"
     profiles: dict[str, dict] = field(default_factory=dict)
+
+    # Free-form text appended to the system prompt (editable from the dashboard).
+    system_prompt_extra: str = ""
 
     workdir: str = "/workspace"
 
@@ -90,6 +100,13 @@ class Config:
         cfg.effort = agent.get("effort", cfg.effort)
         cfg.max_iterations = agent.get("max_iterations", cfg.max_iterations)
 
+        compaction = data.get("compaction", {})
+        cfg.compaction_enabled = compaction.get("enabled", cfg.compaction_enabled)
+        cfg.compaction_threshold_tokens = compaction.get(
+            "threshold_tokens", cfg.compaction_threshold_tokens
+        )
+        cfg.compaction_keep_recent = compaction.get("keep_recent", cfg.compaction_keep_recent)
+
         tools = data.get("tools", {})
         cfg.enabled_tools = tools.get("enabled", cfg.enabled_tools)
         perms = tools.get("permissions", {})
@@ -98,6 +115,7 @@ class Config:
 
         cfg.default_profile = data.get("default_profile", cfg.default_profile)
         cfg.profiles = data.get("profiles", cfg.profiles)
+        cfg.system_prompt_extra = data.get("system_prompt_extra", cfg.system_prompt_extra)
 
         cfg.workdir = data.get("sandbox", {}).get("workdir", cfg.workdir)
 
@@ -150,8 +168,14 @@ class Config:
             "api_key_env": self.api_key_env,
             "base_url": self.base_url,
             "agent": {"max_iterations": self.max_iterations, "effort": self.effort},
+            "compaction": {
+                "enabled": self.compaction_enabled,
+                "threshold_tokens": self.compaction_threshold_tokens,
+                "keep_recent": self.compaction_keep_recent,
+            },
             "default_profile": self.default_profile,
             "profiles": self.profiles,
+            "system_prompt_extra": self.system_prompt_extra,
             "tools": {
                 "enabled": self.enabled_tools,
                 "permissions": {
@@ -161,6 +185,33 @@ class Config:
             },
             "sandbox": {"workdir": self.workdir},
         }
+
+    def update_from(self, payload: dict) -> None:
+        """Apply an allowlisted subset of fields (used by the dashboard editor)."""
+        if "default_profile" in payload:
+            self.default_profile = str(payload["default_profile"])
+        if "system_prompt_extra" in payload:
+            self.system_prompt_extra = str(payload["system_prompt_extra"])
+        if "effort" in payload:
+            self.effort = str(payload["effort"])
+        if "max_iterations" in payload:
+            self.max_iterations = int(payload["max_iterations"])
+        if "permission_default" in payload and payload["permission_default"] in (
+            "allow",
+            "ask",
+            "deny",
+        ):
+            self.permission_default = payload["permission_default"]
+        if isinstance(payload.get("profiles"), dict):
+            self.profiles = payload["profiles"]
+        comp = payload.get("compaction")
+        if isinstance(comp, dict):
+            if "enabled" in comp:
+                self.compaction_enabled = bool(comp["enabled"])
+            if "threshold_tokens" in comp:
+                self.compaction_threshold_tokens = int(comp["threshold_tokens"])
+            if "keep_recent" in comp:
+                self.compaction_keep_recent = int(comp["keep_recent"])
 
     def save(self, path: str | None = None) -> str:
         target = Path(path or self.source_path or _DEFAULT_SAVE_PATH)

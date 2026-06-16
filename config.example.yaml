@@ -10,9 +10,17 @@ agent:
   max_iterations: 50
   effort: high                 # anthropic only: low | medium | high | xhigh | max
 
+compaction:
+  enabled: true
+  threshold_tokens: 40000      # summarize older turns past this (raise for big-context models like Claude)
+  keep_recent: 12              # most recent messages kept verbatim (snapped to a turn boundary)
+
 # Route different purposes to different LLMs. The primary loop runs
 # `default_profile`; the `delegate` tool sends subtasks to a specialist profile.
 # Each profile inherits any field it doesn't set from the top-level config.
+# Free-form text appended to the system prompt (also editable from the dashboard).
+system_prompt_extra: ""
+
 default_profile: chat
 profiles:
   chat:
@@ -35,8 +43,9 @@ tools:
   # configure:    let the agent change its own config / enable-disable tools
   # skill/skill_write: use and author reusable task instructions (skills)
   # delegate: route a subtask to a purpose-specific model (see profiles above)
+  # schedule: create/manage recurring cron tasks (run `work-agent scheduler`)
   enabled: [bash, read, write, edit, glob, grep, http_request,
-            install_tool, configure, skill, skill_write, delegate]
+            install_tool, configure, skill, skill_write, delegate, schedule]
   permissions:
     default: ask               # allow | ask | deny
     overrides:
@@ -45,7 +54,7 @@ tools:
       grep: allow
       skill: allow             # read-only (list/read skills)
       delegate: allow          # routing only; the specialist's actions stay gated
-      # install_tool, configure, skill_write are mutating — keep at 'ask'.
+      # install_tool, configure, skill_write, schedule are mutating — keep at 'ask'.
 
 sandbox:
   workdir: /workspace

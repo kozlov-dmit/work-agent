@@ -6,7 +6,8 @@ container, connects to a configured LLM (Anthropic Claude or any
 OpenAI-compatible endpoint), and accomplishes tasks by calling tools (shell,
 files, HTTP, and extensible plugins / MCP).
 
-See [DESIGN.md](DESIGN.md) for the full architecture.
+See **[SETUP.md](SETUP.md)** for a detailed setup & run guide, and
+[DESIGN.md](DESIGN.md) for the full architecture.
 
 ## Features
 
@@ -26,10 +27,18 @@ See [DESIGN.md](DESIGN.md) for the full architecture.
 - **Per-purpose model routing.** Configure different LLMs for different purposes
   (chat, search, development, analysis). The conversational model orchestrates
   and routes focused subtasks to the right specialist via the `delegate` tool.
+- **Conversation compaction.** Long histories are automatically summarized
+  (provider-agnostic) past a configurable threshold, keeping recent turns
+  verbatim — so sessions don't blow the context window.
+- **Scheduled background tasks (cron).** Ask in plain language ("send a news
+  digest every morning at 9:00") and the agent registers a cron job via the
+  `schedule` tool. A background scheduler runs due tasks autonomously and
+  delivers results to your Telegram chat or a log file.
 - **Permission policy.** Per-tool `allow` / `ask` / `deny` gating, with an
   interactive prompt and a `--yolo` auto-approve mode.
-- **Multiple frontends.** CLI (REPL / one-shot), a **web chat server**, and a
-  **Telegram bot** — all driving the same agent.
+- **Multiple frontends.** CLI (REPL / one-shot), a **web chat server with a
+  dashboard** (metrics, scheduled tasks, live config editing), and a **Telegram
+  bot** — all driving the same agent.
 - **Runs in Docker.** Isolated container, non-root user, `/workspace` mount.
 - **Extensible.** Plugin and MCP tool sources are planned (see DESIGN.md).
 
@@ -62,19 +71,50 @@ export TELEGRAM_BOT_TOKEN=123456:ABC...
 work-agent telegram
 ```
 
-The web UI is a single page that submits tasks over a WebSocket and streams the
+The web server also serves a **dashboard** at `/dashboard`:
+
+- **Metrics** — token usage, LLM reliability (success rate, requests, failures,
+  refusals) and tool call/error counts, **aggregated across all processes** (web,
+  telegram, scheduler) via a shared SQLite store on the volume. System metrics
+  (CPU / memory / network, via `psutil`) are collected from every service and
+  shown **per service**. Auto-refreshes.
+- **Scheduled tasks** — view, add, enable/disable, and delete cron jobs.
+- **Config** — pick the model per purpose (provider/model/effort for
+  chat/search/development/analysis), set the default profile, append free-form
+  text to the system prompt, and adjust effort / permission default / max
+  iterations. Changes are saved to the config file; model/profile edits apply to
+  new sessions and scheduled runs.
+
+The chat page is a single page that submits tasks over a WebSocket and streams the
 agent's text and tool activity live. The Telegram bot gives each chat its own
-session (`/reset` clears history). Both run tools with auto-approve (the
-container is the isolation boundary); `deny` overrides in config still apply.
+session and **persists that chat's history** to
+`/workspace/.work-agent/sessions/telegram-<chat_id>.json`, so it remembers the
+conversation across bot/container restarts (`/reset` clears it). Both frontends
+run tools with auto-approve (the container is the isolation boundary); `deny`
+overrides in config still apply.
+
+> History persistence is scoped to Telegram (a genuinely long-lived,
+> cross-restart channel). CLI and web keep history in memory for the session
+> only. Durable, reusable knowledge is captured separately as skills.
 
 ## Quick start (Docker)
 
 ```bash
-cp .env.example .env          # add your API key
+cp .env.example .env          # add your API key (and TELEGRAM_BOT_TOKEN if used)
 cp config.example.yaml config.yaml
 mkdir -p workspace            # files the agent works on
-docker compose run --rm work-agent chat
-docker compose run --rm work-agent run "create a hello.py and run it"
+
+docker compose up             # starts web (dashboard) + telegram + scheduler
+# → dashboard at http://localhost:8000/dashboard
+```
+
+`docker compose up` brings up all three long-running services: **web** (chat +
+dashboard on port 8000), **telegram** (needs `TELEGRAM_BOT_TOKEN`), and the
+single **scheduler**. One-off commands still work:
+
+```bash
+docker compose run --rm web chat
+docker compose run --rm web run "create a hello.py and run it"
 ```
 
 ## Self-provisioning & self-configuration
@@ -95,6 +135,33 @@ Both are mutating tools and default to the `ask` permission (auto-approved in th
 web/Telegram frontends; the container is the isolation boundary). The image
 grants the `agent` user passwordless `sudo` so `apt` installs work — treat the
 container as single-tenant and untrusted-by-default.
+
+## Scheduled tasks (cron)
+
+The agent can schedule recurring background work. In conversation:
+
+> "Send me a news digest every morning at 9:00."
+
+It calls the `schedule` tool to register a cron job
+(`/workspace/.work-agent/schedules.json`). A separate **scheduler process** runs
+the due jobs and delivers results:
+
+```bash
+work-agent scheduler           # runs the cron loop (delivers to Telegram/log)
+work-agent schedule list       # inspect jobs
+work-agent schedule remove <id>
+```
+
+The scheduler runs as its own service (`work-agent scheduler`, part of `docker
+compose up`) and renews a heartbeat. The schedule store is shared, so a job
+created from any frontend is picked up. If no scheduler is alive when you ask to
+schedule something, the `schedule` tool **returns an error and does not create the
+task** (rather than silently saving a job that would never run). Results go to a
+Telegram chat if the
+job was created with that target and `TELEGRAM_BOT_TOKEN` is set, otherwise to
+`/workspace/.work-agent/schedule-output/<id>/`. Cron times use the job's
+`timezone` (IANA) if set, else the container's local time. Scheduled jobs run
+autonomously with tools auto-approved (`deny` overrides still apply).
 
 ## Skills
 

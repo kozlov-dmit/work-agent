@@ -7,6 +7,8 @@ from typing import Callable
 
 from .agent import Agent, AgentEvents
 from .config import Config
+from .context import Compactor
+from .metrics import METRICS
 from .permissions import PermissionPolicy
 from .providers import build_provider
 from .tools import build_registry
@@ -33,7 +35,16 @@ def build_agent(
         overrides=config.permission_overrides,
         confirm=confirm or auto_allow,
     )
+    compactor = Compactor(
+        provider=provider,
+        threshold_tokens=config.compaction_threshold_tokens,
+        keep_recent=config.compaction_keep_recent,
+        enabled=config.compaction_enabled,
+    )
     workdir = Path(config.workdir)
+    # Point the shared metrics store at the (volume-mounted) state dir so all
+    # processes — web, telegram, scheduler — accumulate into the same database.
+    METRICS.configure(workdir / ".work-agent")
     return Agent(
         provider=provider,
         registry=registry,
@@ -44,4 +55,5 @@ def build_agent(
         config=config,
         state_dir=workdir / ".work-agent",
         profile_role=config.default_profile,
+        compactor=compactor,
     )
