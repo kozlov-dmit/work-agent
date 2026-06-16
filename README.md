@@ -64,8 +64,15 @@ work-agent telegram
 
 The web UI is a single page that submits tasks over a WebSocket and streams the
 agent's text and tool activity live. The Telegram bot gives each chat its own
-session (`/reset` clears history). Both run tools with auto-approve (the
-container is the isolation boundary); `deny` overrides in config still apply.
+session and **persists that chat's history** to
+`/workspace/.work-agent/sessions/telegram-<chat_id>.json`, so it remembers the
+conversation across bot/container restarts (`/reset` clears it). Both frontends
+run tools with auto-approve (the container is the isolation boundary); `deny`
+overrides in config still apply.
+
+> History persistence is scoped to Telegram (a genuinely long-lived,
+> cross-restart channel). CLI and web keep history in memory for the session
+> only. Durable, reusable knowledge is captured separately as skills.
 
 ## Quick start (Docker)
 
