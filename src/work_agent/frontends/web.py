@@ -468,7 +468,9 @@ def run_web(config: Config, host: str, port: int) -> None:
     from pathlib import Path
 
     from ..metrics import METRICS
+    from ..scheduler import start_background_scheduler
 
     METRICS.configure(Path(config.workdir) / ".work-agent")
     METRICS.start_system_reporter("web")
+    start_background_scheduler(config)  # standby scheduler (leader-elected)
     uvicorn.run(create_app(config), host=host, port=port)

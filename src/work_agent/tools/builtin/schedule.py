@@ -77,9 +77,17 @@ class ScheduleTool:
                     cron=cron, task=task, delivery=delivery, timezone=args.get("timezone")
                 )
             )
+            from ...scheduler import scheduler_alive
+
+            warn = (
+                ""
+                if scheduler_alive(_state_dir(ctx))
+                else " WARNING: no scheduler is currently running, so this task is "
+                "saved but won't run until a scheduler/service starts."
+            )
             return ToolOutput(
                 f"Scheduled task {created.id}: '{cron}' → {delivery['type']}. "
-                f"Next run: {created.next_run}."
+                f"Next run: {created.next_run}.{warn}"
             )
 
         task_id = args.get("id")

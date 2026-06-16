@@ -46,11 +46,13 @@ def run_telegram(config: Config) -> None:
         raise RuntimeError("Missing bot token: set $TELEGRAM_BOT_TOKEN")
 
     from ..metrics import METRICS
+    from ..scheduler import start_background_scheduler
     from ..sessions import SessionStore
 
     state_dir = Path(config.workdir) / ".work-agent"
     METRICS.configure(state_dir)
     METRICS.start_system_reporter("telegram")
+    start_background_scheduler(config)  # standby scheduler (leader-elected)
     store = SessionStore(state_dir)
     agents: dict[int, Agent] = {}
 

@@ -152,10 +152,13 @@ work-agent schedule list       # inspect jobs
 work-agent schedule remove <id>
 ```
 
-There is exactly one scheduler — the dedicated `scheduler` process/service (under
-`docker compose up` it's always running). The Telegram bot does **not** run its
-own, so tasks never fire twice. The scheduler reads the shared schedules file, so
-a job created from any frontend is picked up. Results go to a Telegram chat if the
+A scheduler loop runs inside every long-running service (web, telegram, and the
+dedicated scheduler). They compete for a single **leader lease** (an atomic lock
+in SQLite), so only one fires tasks — jobs never run twice — and if the leader
+dies, another live service takes over. So scheduling keeps working as long as any
+service is up (e.g. telegram up but the scheduler service down). The schedule
+store is shared, so a job created from any frontend is picked up; the `schedule`
+tool warns if no scheduler is currently alive. Results go to a Telegram chat if the
 job was created with that target and `TELEGRAM_BOT_TOKEN` is set, otherwise to
 `/workspace/.work-agent/schedule-output/<id>/`. Cron times use the job's
 `timezone` (IANA) if set, else the container's local time. Scheduled jobs run
