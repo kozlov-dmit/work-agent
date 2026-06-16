@@ -11,27 +11,17 @@ from rich.prompt import Confirm
 
 from .agent import Agent, AgentEvents
 from .config import Config
-from .permissions import PermissionPolicy, auto_allow
-from .providers import build_provider
-from .providers.base import ToolCall, ToolResult
+from .permissions import auto_allow
+from .runtime import build_agent
 from .tools import ToolRegistry, build_registry
 
 console = Console()
 
 
 def _build_agent(config: Config, yolo: bool) -> Agent:
-    provider = build_provider(config)
-    registry = build_registry(config.enabled_tools)
-
     def confirm(name: str, args: dict) -> bool:
         console.print(f"[yellow]Tool request:[/] {name} {args}")
         return Confirm.ask("Allow?", default=False)
-
-    policy = PermissionPolicy(
-        default=config.permission_default,
-        overrides=config.permission_overrides,
-        confirm=auto_allow if yolo else confirm,
-    )
 
     events = AgentEvents(
         on_text=lambda t: console.print(t),
@@ -42,13 +32,10 @@ def _build_agent(config: Config, yolo: bool) -> Agent:
         on_denied=lambda c: console.print(f"[red]denied: {c.name}[/]"),
     )
 
-    return Agent(
-        provider=provider,
-        registry=registry,
-        policy=policy,
-        workdir=Path(config.workdir),
-        max_iterations=config.max_iterations,
+    return build_agent(
+        config,
         events=events,
+        confirm=auto_allow if yolo else confirm,
     )
 
 
@@ -84,6 +71,22 @@ def cmd_tools(config: Config) -> int:
     return 0
 
 
+def cmd_serve(config: Config, host: str, port: int) -> int:
+    from .frontends.web import run_web
+
+    console.print(f"[bold]work-agent[/] web chat on http://{host}:{port}")
+    run_web(config, host, port)
+    return 0
+
+
+def cmd_telegram(config: Config) -> int:
+    from .frontends.telegram import run_telegram
+
+    console.print("[bold]work-agent[/] Telegram bot starting (polling)…")
+    run_telegram(config)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="work-agent")
     parser.add_argument("--config", help="Path to config.yaml")
@@ -97,6 +100,12 @@ def main(argv: list[str] | None = None) -> int:
     tools_sub = tools_parser.add_subparsers(dest="tools_command", required=True)
     tools_sub.add_parser("list", help="List available tools")
 
+    p_serve = sub.add_parser("serve", help="Run the web chat server")
+    p_serve.add_argument("--host", default="0.0.0.0")
+    p_serve.add_argument("--port", type=int, default=8000)
+
+    sub.add_parser("telegram", help="Run the Telegram bot (TELEGRAM_BOT_TOKEN)")
+
     args = parser.parse_args(argv)
     config = Config.load(args.config)
 
@@ -107,6 +116,10 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_run(config, args.task, args.yolo)
         if args.command == "tools":
             return cmd_tools(config)
+        if args.command == "serve":
+            return cmd_serve(config, args.host, args.port)
+        if args.command == "telegram":
+            return cmd_telegram(config)
     except RuntimeError as e:
         console.print(f"[red]Error:[/] {e}")
         return 1

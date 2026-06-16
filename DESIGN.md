@@ -185,15 +185,29 @@ sandbox:
   (`docker run ... work-agent run "задача"`).
 - `docker-compose.yml` для удобного локального запуска с volume и env-файлом.
 
-## 5. Точки входа (CLI)
+## 5. Точки входа (фронтенды)
+
+Все фронтенды переиспользуют один agent loop через `runtime.build_agent`.
 
 ```
 work-agent chat                 # интерактивный REPL
 work-agent run "<задача>"       # автономный one-shot
-work-agent --config config.yaml ...
 work-agent tools list           # показать доступные инструменты
+work-agent serve --port 8000    # веб-сервер с чатом (WebSocket, стриминг событий)
+work-agent telegram             # Telegram-бот (TELEGRAM_BOT_TOKEN)
 ```
-(Опционально позже: `work-agent serve` — HTTP API для интеграций.)
+
+- **Web** (`frontends/web.py`): FastAPI + одностраничный UI; каждое
+  WebSocket-соединение = сессия со своей историей; ход агента исполняется в
+  пуле потоков, события стримятся в браузер через thread-safe asyncio-очередь.
+- **Telegram** (`frontends/telegram.py`): альтернатива веб-серверу; каждый чат
+  = своя сессия (`/reset` сбрасывает историю); активность инструментов
+  отправляется сообщениями.
+- В неинтерактивных фронтендах `ask`-решения авто-разрешаются (граница изоляции
+  — контейнер), но `deny` из конфига продолжает действовать.
+
+Зависимости фронтендов — опциональные extras: `pip install 'work-agent[web]'` /
+`'work-agent[telegram]'` (в Docker-образ ставятся оба).
 
 ## 6. Структура проекта (предлагаемая)
 
@@ -205,9 +219,13 @@ work-agent/
 ├── config.example.yaml
 ├── src/work_agent/
 │   ├── __main__.py            # CLI
+│   ├── runtime.py             # build_agent — общая сборка для всех фронтендов
 │   ├── config.py
 │   ├── agent.py               # agent loop
-│   ├── context.py             # история + компакция
+│   ├── context.py             # история + компакция (планируется)
+│   ├── frontends/
+│   │   ├── web.py             # FastAPI + WebSocket чат
+│   │   └── telegram.py        # Telegram-бот
 │   ├── providers/
 │   │   ├── base.py            # LLMProvider, нормализованные типы
 │   │   ├── anthropic.py

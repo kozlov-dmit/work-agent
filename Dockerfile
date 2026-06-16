@@ -13,10 +13,11 @@ RUN useradd --create-home --uid 1000 agent \
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[web,telegram]"
 
 USER agent
 WORKDIR /workspace
 
+EXPOSE 8000
 ENTRYPOINT ["work-agent"]
 CMD ["chat"]
