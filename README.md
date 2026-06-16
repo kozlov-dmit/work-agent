@@ -6,7 +6,8 @@ container, connects to a configured LLM (Anthropic Claude or any
 OpenAI-compatible endpoint), and accomplishes tasks by calling tools (shell,
 files, HTTP, and extensible plugins / MCP).
 
-See [DESIGN.md](DESIGN.md) for the full architecture.
+See **[SETUP.md](SETUP.md)** for a detailed setup & run guide, and
+[DESIGN.md](DESIGN.md) for the full architecture.
 
 ## Features
 
