@@ -100,78 +100,130 @@ _DASHBOARD_HTML = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>work-agent — dashboard</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font-family: system-ui, sans-serif; margin: 0; }
-  header { padding: .6rem 1rem; border-bottom: 1px solid #8884; font-weight: 600; }
-  nav { display: flex; gap: .5rem; padding: .5rem 1rem; border-bottom: 1px solid #8884; }
-  nav button { padding: .4rem .8rem; border: 1px solid #8886; border-radius: .5rem;
-               background: transparent; cursor: pointer; }
-  nav button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
-  main { padding: 1rem; max-width: 880px; }
-  section { display: none; }
-  section.active { display: block; }
-  .cards { display: flex; flex-wrap: wrap; gap: .75rem; }
-  .card { flex: 1 1 140px; border: 1px solid #8884; border-radius: .6rem; padding: .75rem; }
-  .card .v { font-size: 1.5rem; font-weight: 700; }
-  .card .l { opacity: .7; font-size: .8rem; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: .4rem; border-bottom: 1px solid #8883; font-size: .9rem; }
-  label { display: block; margin: .5rem 0 .15rem; font-size: .85rem; opacity: .8; }
-  input, select, textarea { width: 100%; padding: .4rem; border: 1px solid #8886;
-                            border-radius: .4rem; box-sizing: border-box; font: inherit; }
-  textarea { min-height: 6rem; }
-  button.go { margin-top: .8rem; padding: .5rem 1rem; border: 0; border-radius: .5rem;
-              background: #2563eb; color: #fff; cursor: pointer; }
-  .row { display: flex; gap: .5rem; } .row > * { flex: 1; }
-  .muted { opacity: .65; font-size: .85rem; }
-  .ok { color: #16a34a; } .bad { color: #dc2626; }
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#fafbfc; --text:#1b1f27; --muted:#6b7280;
+    --border:#e7e9ee; --accent:#6366f1; --accent-weak:#eef0fe; --good:#16a34a; --bad:#e11d48;
+    --radius:14px; --shadow:0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0e1014; --surface:#161a21; --surface-2:#1b2029; --text:#e8eaf0; --muted:#99a1b0;
+      --border:#262c38; --accent:#818cf8; --accent-weak:#1e2435; --good:#34d399; --bad:#fb7185;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px rgba(0,0,0,.28);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased;
+         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color:var(--accent); text-decoration:none; }
+  .topbar { display:flex; align-items:center; gap:.7rem; padding:.85rem 1.25rem;
+            background:var(--surface); border-bottom:1px solid var(--border); }
+  .brand { display:flex; align-items:center; gap:.55rem; font-weight:650; letter-spacing:-.01em; }
+  .dot { width:.6rem; height:.6rem; border-radius:50%; background:var(--accent);
+         box-shadow:0 0 0 4px var(--accent-weak); }
+  .topbar .sep { margin-left:auto; color:var(--muted); font-size:.85rem; }
+  nav.tabs { display:flex; gap:.25rem; margin:1.1rem auto 0; max-width:920px; padding:.25rem 1.25rem; }
+  nav.tabs .seg { display:inline-flex; gap:.2rem; padding:.25rem; background:var(--surface-2);
+                  border:1px solid var(--border); border-radius:999px; }
+  nav.tabs button { border:0; background:transparent; color:var(--muted); padding:.45rem 1rem;
+                    border-radius:999px; cursor:pointer; font:inherit; font-weight:550; transition:.15s; }
+  nav.tabs button.active { background:var(--accent); color:#fff; }
+  main { max-width:920px; margin:0 auto; padding:1.25rem; }
+  .subtitle { color:var(--muted); font-size:.85rem; margin:.15rem 0 1rem; }
+  h3 { margin:1.6rem 0 .3rem; font-size:1rem; letter-spacing:-.01em; }
+  section { display:none; } section.active { display:block; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:.8rem; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+          padding:.85rem 1rem; box-shadow:var(--shadow); transition:transform .15s, box-shadow .15s; }
+  .card:hover { transform:translateY(-2px); }
+  .card .l { font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+             margin-bottom:.35rem; }
+  .card .v { font-size:1.55rem; font-weight:700; letter-spacing:-.02em; }
+  .panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+           box-shadow:var(--shadow); padding:.4rem 1.1rem 1.1rem; margin-top:.4rem; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; padding:.6rem; font-size:.68rem; text-transform:uppercase;
+       letter-spacing:.05em; color:var(--muted); }
+  td { padding:.55rem .6rem; border-top:1px solid var(--border); font-size:.9rem; }
+  tbody tr:hover { background:var(--surface-2); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.85em; }
+  .pill { display:inline-block; font-size:.68rem; font-weight:600; padding:.15rem .55rem; border-radius:999px; }
+  .pill.on { background:color-mix(in srgb, var(--good) 16%, transparent); color:var(--good); }
+  .pill.off { background:color-mix(in srgb, var(--bad) 16%, transparent); color:var(--bad); }
+  .iconbtn { border:1px solid var(--border); background:var(--surface); color:var(--text);
+             padding:.25rem .55rem; border-radius:.5rem; cursor:pointer; font:inherit; font-size:.8rem;
+             transition:.15s; }
+  .iconbtn:hover { border-color:var(--accent); color:var(--accent); }
+  label { display:block; margin:.7rem 0 .25rem; font-size:.8rem; color:var(--muted); }
+  input, select, textarea { width:100%; padding:.55rem .65rem; background:var(--surface-2);
+    border:1px solid var(--border); border-radius:.6rem; color:var(--text); font:inherit; transition:.15s; }
+  input:focus, select:focus, textarea:focus { outline:0; border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--accent-weak); }
+  textarea { min-height:6rem; resize:vertical; }
+  .row { display:flex; gap:.7rem; flex-wrap:wrap; } .row > * { flex:1 1 160px; }
+  .btn { margin-top:1rem; padding:.6rem 1.15rem; border:0; border-radius:.6rem; background:var(--accent);
+         color:#fff; font:inherit; font-weight:600; cursor:pointer; transition:.15s; }
+  .btn:hover { filter:brightness(1.07); }
+  .muted { color:var(--muted); font-size:.83rem; }
 </style>
 </head>
 <body>
-<header>work-agent — dashboard &nbsp;·&nbsp; <a href="/">chat</a></header>
-<nav>
+<div class="topbar">
+  <span class="brand"><span class="dot"></span> work-agent</span>
+  <span class="sep"><a href="/">← chat</a></span>
+</div>
+<nav class="tabs"><div class="seg">
   <button data-tab="metrics" class="active">Metrics</button>
   <button data-tab="tasks">Scheduled tasks</button>
   <button data-tab="config">Config</button>
-</nav>
+</div></nav>
 <main>
   <section id="metrics" class="active">
+    <p class="subtitle">Live runtime metrics for this process.</p>
     <div class="cards" id="sys"></div>
-    <h3>Tokens & reliability</h3>
+    <h3>Tokens &amp; reliability</h3>
     <div class="cards" id="usage"></div>
     <p class="muted" id="uptime"></p>
   </section>
 
   <section id="tasks">
-    <table><thead><tr><th>id</th><th>cron</th><th>deliver</th><th>next</th>
-      <th>task</th><th></th></tr></thead><tbody id="tasks-body"></tbody></table>
-    <h3>Add task</h3>
-    <div class="row">
-      <div><label>cron</label><input id="t-cron" placeholder="0 9 * * *" /></div>
-      <div><label>timezone (optional)</label><input id="t-tz" placeholder="Europe/Moscow" /></div>
+    <p class="subtitle">Recurring background jobs run by the scheduler.</p>
+    <div class="panel">
+      <table><thead><tr><th>id</th><th>cron</th><th>deliver</th><th>status</th><th>next</th>
+        <th>task</th><th></th></tr></thead><tbody id="tasks-body"></tbody></table>
     </div>
-    <label>task</label><input id="t-task" placeholder="send a news digest" />
-    <button class="go" id="t-add">Add</button>
-    <p class="muted">Dashboard-created tasks deliver to a log file under
-      /workspace/.work-agent/schedule-output/.</p>
+    <h3>Add task</h3>
+    <div class="panel">
+      <div class="row">
+        <div><label>cron</label><input id="t-cron" placeholder="0 9 * * *" /></div>
+        <div><label>timezone (optional)</label><input id="t-tz" placeholder="Europe/Moscow" /></div>
+      </div>
+      <label>task</label><input id="t-task" placeholder="send a news digest" />
+      <button class="btn" id="t-add">Add task</button>
+      <p class="muted">Dashboard-created tasks deliver to a log file under
+        /workspace/.work-agent/schedule-output/.</p>
+    </div>
   </section>
 
   <section id="config">
-    <h3>Models per purpose</h3>
-    <div id="profiles"></div>
-    <label>Default profile</label><select id="c-default"></select>
-    <label>System prompt addendum (appended to every turn)</label>
-    <textarea id="c-extra" placeholder="Extra instructions..."></textarea>
-    <div class="row">
-      <div><label>Effort</label>
-        <select id="c-effort"><option>low</option><option>medium</option>
-          <option>high</option><option>xhigh</option><option>max</option></select></div>
-      <div><label>Permission default</label>
-        <select id="c-perm"><option>allow</option><option>ask</option><option>deny</option></select></div>
-      <div><label>Max iterations</label><input id="c-maxit" type="number" /></div>
+    <p class="subtitle">Pick a model per purpose and tune behaviour. Saved to the config file.</p>
+    <div class="panel">
+      <h3 style="margin-top:.6rem">Models per purpose</h3>
+      <div id="profiles"></div>
+      <label>Default profile</label><select id="c-default"></select>
+      <label>System prompt addendum (appended to every turn)</label>
+      <textarea id="c-extra" placeholder="Extra instructions..."></textarea>
+      <div class="row">
+        <div><label>Effort</label>
+          <select id="c-effort"><option>low</option><option>medium</option>
+            <option>high</option><option>xhigh</option><option>max</option></select></div>
+        <div><label>Permission default</label>
+          <select id="c-perm"><option>allow</option><option>ask</option><option>deny</option></select></div>
+        <div><label>Max iterations</label><input id="c-maxit" type="number" /></div>
+      </div>
+      <button class="btn" id="c-save">Save config</button>
+      <p class="muted" id="c-status"></p>
     </div>
-    <button class="go" id="c-save">Save config</button>
-    <p class="muted" id="c-status"></p>
   </section>
 </main>
 <script>
@@ -181,7 +233,7 @@ _DASHBOARD_HTML = """<!doctype html>
     document.querySelectorAll("section").forEach((x) => x.classList.remove("active"));
     b.classList.add("active"); $(b.dataset.tab).classList.add("active");
   });
-  const card = (v, l) => `<div class="card"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  const card = (v, l) => `<div class="card"><div class="l">${l}</div><div class="v">${v}</div></div>`;
 
   async function loadMetrics() {
     const m = await (await fetch("/api/metrics")).json();
@@ -192,8 +244,8 @@ _DASHBOARD_HTML = """<!doctype html>
         + card(s.net_sent_mb + " / " + s.net_recv_mb + " MB", "Net sent / recv")
       : card("n/a", "System metrics (install psutil)");
     const rel = (m.llm.reliability * 100).toFixed(1);
-    $("usage").innerHTML = card(m.tokens.total, "Tokens total")
-      + card(m.tokens.input + " / " + m.tokens.output, "Input / output")
+    $("usage").innerHTML = card(m.tokens.total.toLocaleString(), "Tokens total")
+      + card(m.tokens.input.toLocaleString() + " / " + m.tokens.output.toLocaleString(), "Input / output")
       + card(rel + "%", "LLM reliability")
       + card(m.llm.requests, "LLM requests")
       + card(m.llm.failures, "Failures")
@@ -204,10 +256,11 @@ _DASHBOARD_HTML = """<!doctype html>
   async function loadTasks() {
     const d = await (await fetch("/api/schedules")).json();
     $("tasks-body").innerHTML = (d.tasks || []).map((t) => `<tr>
-      <td>${t.id}</td><td>${t.cron}</td><td>${(t.delivery||{}).type||""}</td>
-      <td>${t.next_run||""}</td><td>${(t.task||"").slice(0,40)}</td>
-      <td><button onclick="toggle('${t.id}','${t.enabled?"disable":"enable"}')">${t.enabled?"disable":"enable"}</button>
-          <button onclick="del('${t.id}')">delete</button></td></tr>`).join("");
+      <td class="mono">${t.id}</td><td class="mono">${t.cron}</td><td>${(t.delivery||{}).type||""}</td>
+      <td><span class="pill ${t.enabled?"on":"off"}">${t.enabled?"on":"off"}</span></td>
+      <td class="mono">${t.next_run||""}</td><td>${(t.task||"").slice(0,40)}</td>
+      <td><button class="iconbtn" onclick="toggle('${t.id}','${t.enabled?"disable":"enable"}')">${t.enabled?"disable":"enable"}</button>
+          <button class="iconbtn" onclick="del('${t.id}')">delete</button></td></tr>`).join("");
   }
   window.toggle = async (id, action) => { await fetch(`/api/schedules/${id}/${action}`, {method:"POST"}); loadTasks(); };
   window.del = async (id) => { await fetch(`/api/schedules/${id}`, {method:"DELETE"}); loadTasks(); };
