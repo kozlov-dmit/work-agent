@@ -66,6 +66,8 @@ def run_telegram(config: Config) -> None:
             agent = build_agent(config, events=events, confirm=auto_allow)
             # Restore prior conversation so the bot remembers across restarts.
             agent.history = store.load(session_id(chat_id))
+            # Scheduled tasks created from this chat are delivered back here.
+            agent.delivery = {"type": "telegram", "target": chat_id}
             agents[chat_id] = agent
         return agents[chat_id]
 
@@ -97,7 +99,19 @@ def run_telegram(config: Config) -> None:
         for part in _chunk(final or "(no output)"):
             await update.message.reply_text(part)
 
-    app = Application.builder().token(token).build()
+    # Run the cron scheduler alongside the bot, delivering results to chats.
+    import functools
+
+    from ..scheduler import Scheduler, default_deliver
+
+    state_dir = Path(config.workdir) / ".work-agent"
+
+    async def _post_init(application) -> None:
+        deliver = functools.partial(default_deliver, state_dir=state_dir, bot=application.bot)
+        scheduler = Scheduler(config=config, state_dir=state_dir, deliver=deliver)
+        application.create_task(scheduler.run())
+
+    app = Application.builder().token(token).post_init(_post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))

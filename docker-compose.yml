@@ -21,5 +21,20 @@ services:
       - ./config.yaml:/app/config.yaml
     # Default is `chat`. Other frontends:
     #   docker compose run --rm --service-ports work-agent serve
-    #   docker compose run --rm work-agent telegram
+    #   docker compose run --rm work-agent telegram   (also runs the scheduler)
     #   docker compose run --rm work-agent run "your task"
+
+  # Standalone cron scheduler (the Telegram bot already runs one internally).
+  # Enable with: docker compose --profile scheduler up scheduler
+  scheduler:
+    build: .
+    image: work-agent:latest
+    profiles: ["scheduler"]
+    env_file:
+      - .env
+    environment:
+      - WORK_AGENT_CONFIG=/app/config.yaml
+    volumes:
+      - ./workspace:/workspace
+      - ./config.yaml:/app/config.yaml
+    command: ["scheduler"]

@@ -26,6 +26,7 @@ _DEFAULT_TOOLS = [
     "skill",
     "skill_write",
     "delegate",
+    "schedule",
 ]
 
 # Specialist roles the agent can delegate to via the `delegate` tool.

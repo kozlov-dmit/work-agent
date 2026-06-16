@@ -29,6 +29,10 @@ See [DESIGN.md](DESIGN.md) for the full architecture.
 - **Conversation compaction.** Long histories are automatically summarized
   (provider-agnostic) past a configurable threshold, keeping recent turns
   verbatim — so sessions don't blow the context window.
+- **Scheduled background tasks (cron).** Ask in plain language ("send a news
+  digest every morning at 9:00") and the agent registers a cron job via the
+  `schedule` tool. A background scheduler runs due tasks autonomously and
+  delivers results to your Telegram chat or a log file.
 - **Permission policy.** Per-tool `allow` / `ask` / `deny` gating, with an
   interactive prompt and a `--yolo` auto-approve mode.
 - **Multiple frontends.** CLI (REPL / one-shot), a **web chat server**, and a
@@ -105,6 +109,30 @@ Both are mutating tools and default to the `ask` permission (auto-approved in th
 web/Telegram frontends; the container is the isolation boundary). The image
 grants the `agent` user passwordless `sudo` so `apt` installs work — treat the
 container as single-tenant and untrusted-by-default.
+
+## Scheduled tasks (cron)
+
+The agent can schedule recurring background work. In conversation:
+
+> "Send me a news digest every morning at 9:00."
+
+It calls the `schedule` tool to register a cron job
+(`/workspace/.work-agent/schedules.json`). A separate **scheduler process** runs
+the due jobs and delivers results:
+
+```bash
+work-agent scheduler           # runs the cron loop (delivers to Telegram/log)
+work-agent schedule list       # inspect jobs
+work-agent schedule remove <id>
+```
+
+The Telegram bot starts the scheduler automatically and delivers each job's
+result to the chat that created it. Standalone (`work-agent scheduler`), results
+go to a Telegram chat if the job was created with that target and
+`TELEGRAM_BOT_TOKEN` is set, otherwise to
+`/workspace/.work-agent/schedule-output/<id>/`. Cron times use the job's
+`timezone` (IANA) if set, else the container's local time. Scheduled jobs run
+autonomously with tools auto-approved (`deny` overrides still apply).
 
 ## Skills
 

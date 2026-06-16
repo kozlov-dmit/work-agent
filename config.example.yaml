@@ -40,8 +40,9 @@ tools:
   # configure:    let the agent change its own config / enable-disable tools
   # skill/skill_write: use and author reusable task instructions (skills)
   # delegate: route a subtask to a purpose-specific model (see profiles above)
+  # schedule: create/manage recurring cron tasks (run `work-agent scheduler`)
   enabled: [bash, read, write, edit, glob, grep, http_request,
-            install_tool, configure, skill, skill_write, delegate]
+            install_tool, configure, skill, skill_write, delegate, schedule]
   permissions:
     default: ask               # allow | ask | deny
     overrides:
@@ -50,7 +51,7 @@ tools:
       grep: allow
       skill: allow             # read-only (list/read skills)
       delegate: allow          # routing only; the specialist's actions stay gated
-      # install_tool, configure, skill_write are mutating — keep at 'ask'.
+      # install_tool, configure, skill_write, schedule are mutating — keep at 'ask'.
 
 sandbox:
   workdir: /workspace

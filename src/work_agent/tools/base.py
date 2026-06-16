@@ -21,6 +21,7 @@ class ToolContext:
     config: Any | None = None  # work_agent.config.Config
     registry: Any | None = None  # work_agent.tools.registry.ToolRegistry
     agent: Any | None = None  # work_agent.agent.Agent (for delegation)
+    delivery: Any | None = None  # default delivery target for scheduled tasks
 
 
 @dataclass

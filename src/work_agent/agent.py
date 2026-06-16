@@ -77,6 +77,7 @@ class Agent:
     profile_role: str = "chat"  # which purpose this agent serves
     depth: int = 0  # delegation depth (0 = primary chat agent)
     compactor: object | None = None  # work_agent.context.Compactor
+    delivery: dict | None = None  # default delivery target for scheduled tasks
 
     def system_prompt(self) -> str:
         role_intro = ROLE_INSTRUCTIONS.get(self.profile_role)
@@ -96,6 +97,7 @@ class Agent:
             config=self.config,
             registry=self.registry,
             agent=self,
+            delivery=self.delivery,
         )
         final_text = ""
         system = self.system_prompt()

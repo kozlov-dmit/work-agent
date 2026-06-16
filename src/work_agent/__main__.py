@@ -98,6 +98,57 @@ def cmd_bootstrap(config: Config) -> int:
     return 0
 
 
+def cmd_scheduler(config: Config) -> int:
+    """Run the background cron scheduler (fires due tasks, delivers results)."""
+    import asyncio
+    import functools
+    import os
+
+    from .scheduler import Scheduler, default_deliver
+
+    state_dir = Path(config.workdir) / ".work-agent"
+    bot = None
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if token:
+        try:
+            from telegram import Bot
+
+            bot = Bot(token)
+        except ImportError:
+            console.print("[yellow]Telegram not installed; telegram deliveries fall back to log.[/]")
+
+    deliver = functools.partial(default_deliver, state_dir=state_dir, bot=bot)
+    scheduler = Scheduler(config=config, state_dir=state_dir, deliver=deliver)
+    console.print("[bold]work-agent[/] scheduler running. Ctrl-C to stop.")
+    try:
+        asyncio.run(scheduler.run())
+    except KeyboardInterrupt:
+        return 0
+    return 0
+
+
+def cmd_schedule(config: Config, action: str, task_id: str | None) -> int:
+    from .scheduling import ScheduleStore
+
+    store = ScheduleStore(Path(config.workdir) / ".work-agent")
+    if action == "list":
+        tasks = store.load()
+        if not tasks:
+            console.print("[dim](no scheduled tasks)[/]")
+        for t in tasks:
+            state = "on" if t.enabled else "off"
+            console.print(
+                f"[bold]{t.id}[/] [{state}] '{t.cron}' → {t.delivery.get('type')} | "
+                f"next {t.next_run or '?'} | {t.task[:60]}"
+            )
+        return 0
+    if action == "remove":
+        ok = store.remove(task_id or "")
+        console.print("removed" if ok else f"[red]no such task: {task_id}[/]")
+        return 0 if ok else 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="work-agent")
     parser.add_argument("--config", help="Path to config.yaml")
@@ -117,6 +168,13 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("telegram", help="Run the Telegram bot (TELEGRAM_BOT_TOKEN)")
     sub.add_parser("bootstrap", help="Replay self-provisioned tools (startup hook)")
+    sub.add_parser("scheduler", help="Run the background cron scheduler")
+
+    sched_parser = sub.add_parser("schedule", help="Inspect/manage scheduled tasks")
+    sched_sub = sched_parser.add_subparsers(dest="schedule_command", required=True)
+    sched_sub.add_parser("list", help="List scheduled tasks")
+    p_sched_rm = sched_sub.add_parser("remove", help="Remove a scheduled task")
+    p_sched_rm.add_argument("id", help="Task id")
 
     args = parser.parse_args(argv)
     config = Config.load(args.config)
@@ -134,6 +192,10 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_telegram(config)
         if args.command == "bootstrap":
             return cmd_bootstrap(config)
+        if args.command == "scheduler":
+            return cmd_scheduler(config)
+        if args.command == "schedule":
+            return cmd_schedule(config, args.schedule_command, getattr(args, "id", None))
     except RuntimeError as e:
         console.print(f"[red]Error:[/] {e}")
         return 1
