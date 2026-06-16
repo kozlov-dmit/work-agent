@@ -1,0 +1,20 @@
+services:
+  work-agent:
+    build: .
+    image: work-agent:latest
+    stdin_open: true
+    tty: true
+    env_file:
+      - .env
+    ports:
+      # Web chat server (used by the `serve` command).
+      - "8000:8000"
+    volumes:
+      # Mount your project so the agent can read/write files in /workspace.
+      - ./workspace:/workspace
+      # Optional: provide a custom config.
+      - ./config.yaml:/app/config.yaml:ro
+    # Default is `chat`. Other frontends:
+    #   docker compose run --rm --service-ports work-agent serve
+    #   docker compose run --rm work-agent telegram
+    #   docker compose run --rm work-agent run "your task"
