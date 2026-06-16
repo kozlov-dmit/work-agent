@@ -72,22 +72,24 @@ class ScheduleTool:
                     "Telegram delivery isn't available here; pass delivery='log'.", is_error=True
                 )
 
+            from ...scheduler import scheduler_alive
+
+            if not scheduler_alive(_state_dir(ctx)):
+                return ToolOutput(
+                    "Cannot schedule: the scheduler service is not running, so the "
+                    "task would never execute. Start it (e.g. `docker compose up "
+                    "scheduler`) and try again.",
+                    is_error=True,
+                )
+
             created = store.add(
                 ScheduledTask(
                     cron=cron, task=task, delivery=delivery, timezone=args.get("timezone")
                 )
             )
-            from ...scheduler import scheduler_alive
-
-            warn = (
-                ""
-                if scheduler_alive(_state_dir(ctx))
-                else " WARNING: no scheduler is currently running, so this task is "
-                "saved but won't run until a scheduler/service starts."
-            )
             return ToolOutput(
                 f"Scheduled task {created.id}: '{cron}' → {delivery['type']}. "
-                f"Next run: {created.next_run}.{warn}"
+                f"Next run: {created.next_run}."
             )
 
         task_id = args.get("id")

@@ -1,19 +1,16 @@
 """Background scheduler that fires due cron tasks and delivers their results.
 
-Resilience: a scheduler loop can run inside every long-running service (web,
-telegram, scheduler). They compete for a single leader lease (an atomic lock in
-SQLite); only the current leader fires tasks, so jobs never run twice. If the
-leader dies, another live service takes over once the lease expires — so as long
-as any service is up, scheduled tasks keep running.
+The scheduler runs as its own service (`work-agent scheduler`). On each tick it
+renews a heartbeat (an entry in SQLite) so other processes can tell whether a
+scheduler is alive — the `schedule` tool refuses to add a task if none is. The
+heartbeat is owner-scoped, so it also guards against accidentally running two
+scheduler instances (only the heartbeat holder fires).
 """
 
 from __future__ import annotations
 
 import asyncio
-import functools
-import os
 import sqlite3
-import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -34,7 +31,7 @@ DeliverFn = Callable[[ScheduledTask, str], Awaitable[None]]
 
 
 class Lease:
-    """Single-leader lock shared via SQLite, so only one scheduler fires tasks."""
+    """Owner-scoped heartbeat/lock in SQLite: liveness signal + single-fire guard."""
 
     def __init__(self, path: Path, ttl: float = 90.0) -> None:
         self.path = Path(path)
@@ -51,7 +48,7 @@ class Lease:
         return conn
 
     def acquire(self, owner: str) -> bool:
-        """Become/renew leader if free, expired, or already ours. Atomic."""
+        """Claim/renew the heartbeat if free, expired, or already ours. Atomic."""
         now = time.time()
         try:
             conn = self._connect()
@@ -129,20 +126,6 @@ async def default_deliver(
     write_log(state_dir, task, result)
 
 
-def _build_deliver(state_dir: Path) -> DeliverFn:
-    """Delivery callback: Telegram (if a token + SDK are present) or log file."""
-    bot = None
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    if token:
-        try:
-            from telegram import Bot
-
-            bot = Bot(token)
-        except ImportError:
-            bot = None
-    return functools.partial(default_deliver, state_dir=state_dir, bot=bot)
-
-
 def _run_one_turn(config: Config, task_text: str) -> str:
     from .runtime import build_agent
 
@@ -175,7 +158,8 @@ class Scheduler:
             await asyncio.sleep(self.tick_seconds)
 
     async def tick_once(self) -> None:
-        # Only the lease holder fires tasks (prevents double execution).
+        # Renew the heartbeat; if another scheduler instance holds it, stand by
+        # (guards against accidentally running two schedulers).
         if self._lease is not None and not self._lease.acquire(self.owner):
             return
 
@@ -213,16 +197,3 @@ class Scheduler:
             await self.deliver(task, result)
         except Exception:  # noqa: BLE001
             pass
-
-
-def start_background_scheduler(config: Config) -> None:
-    """Run a scheduler loop in a daemon thread (for web/telegram services).
-
-    Safe to start in several services at once — the leader lease ensures only one
-    actually fires tasks, while the others stand by to take over.
-    """
-    state_dir = Path(config.workdir) / ".work-agent"
-    scheduler = Scheduler(config=config, state_dir=state_dir, deliver=_build_deliver(state_dir))
-    threading.Thread(
-        target=lambda: asyncio.run(scheduler.run()), name="scheduler-bg", daemon=True
-    ).start()

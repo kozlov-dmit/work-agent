@@ -41,7 +41,15 @@ def test_store_add_load_remove(tmp_path: Path):
     assert not store.remove("missing")
 
 
+def _heartbeat(tmp_path: Path) -> None:
+    """Simulate a running scheduler so the tool allows adding tasks."""
+    from work_agent.scheduler import Lease
+
+    Lease(tmp_path / "scheduler.db", ttl=60).acquire("test")
+
+
 def test_schedule_tool_add_defaults_to_telegram_from_context(tmp_path: Path):
+    _heartbeat(tmp_path)
     ctx = ToolContext(
         workdir=tmp_path,
         state_dir=tmp_path,
@@ -56,6 +64,14 @@ def test_schedule_tool_add_defaults_to_telegram_from_context(tmp_path: Path):
     assert tasks[0].delivery == {"type": "telegram", "target": 4242}
 
 
+def test_schedule_tool_errors_when_no_scheduler(tmp_path: Path):
+    ctx = ToolContext(workdir=tmp_path, state_dir=tmp_path)
+    out = ScheduleTool().run({"action": "add", "cron": "0 9 * * *", "task": "x"}, ctx)
+    assert out.is_error
+    assert "scheduler" in out.content.lower()
+    assert ScheduleStore(tmp_path).load() == []  # nothing persisted
+
+
 def test_schedule_tool_telegram_requested_without_context_errors(tmp_path: Path):
     ctx = ToolContext(workdir=tmp_path, state_dir=tmp_path)  # no delivery hint
     out = ScheduleTool().run(
@@ -65,6 +81,7 @@ def test_schedule_tool_telegram_requested_without_context_errors(tmp_path: Path)
 
 
 def test_schedule_tool_defaults_to_log(tmp_path: Path):
+    _heartbeat(tmp_path)
     ctx = ToolContext(workdir=tmp_path, state_dir=tmp_path)
     out = ScheduleTool().run({"action": "add", "cron": "0 9 * * *", "task": "x"}, ctx)
     assert not out.is_error
